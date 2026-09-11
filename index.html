@@ -1915,8 +1915,7 @@ tr.voided td{opacity:.5;text-decoration:line-through}
       </div>
       <div class="field" style="margin-top:11px">
         <label>Oppure incolla qui le righe</label>
-        <textarea id="diText" oninput="diDigita()" style="min-height:120px;font-size:14px"
-          placeholder="Data;Numero;Tipo;Nominativo;Descrizione;Cassa;Deposito;Importo&#10;03/08/2026;26CA0001E;entrata;Mario Rossi;decima agosto;Decima;Contanti;120,00"></textarea>
+        <textarea id="diText" oninput="diDigita()" style="min-height:120px;font-size:14px"></textarea>
       </div>
       <div id="diInfo"></div>
       <div id="diMap" style="margin-top:12px"></div>
@@ -2162,7 +2161,9 @@ const VALUTE={
   USD:{ban:'\ud83c\uddfa\ud83c\uddf8',sim:'$',   nome:'Dollaro americano', en:'US dollars'},
   RON:{ban:'\ud83c\uddf7\ud83c\uddf4',sim:'lei', nome:'Leu romeno',        en:'Romanian lei'},
   BRL:{ban:'\ud83c\udde7\ud83c\uddf7',sim:'R$',  nome:'Real brasiliano',   en:'Brazilian reais'},
-  GBP:{ban:'\ud83c\uddec\ud83c\udde7',sim:'\u00a3',  nome:'Sterlina inglese',  en:'pounds sterling'}
+  GBP:{ban:'\ud83c\uddec\ud83c\udde7',sim:'\u00a3',  nome:'Sterlina inglese',  en:'pounds sterling'},
+  ARS:{ban:'\ud83c\udde6\ud83c\uddf7',sim:'$',   nome:'Peso argentino',    en:'Argentine pesos'},
+  CAD:{ban:'\ud83c\udde8\ud83c\udde6',sim:'$',   nome:'Dollaro canadese',  en:'Canadian dollars'}
 };
 /* si legge dalle impostazioni · se lì c'è scritto qualcosa che non conosco,
    o se il programma non è ancora partito, si torna sempre all'euro */
@@ -2223,7 +2224,7 @@ const DEFAULTS={
 /* Il numero di versione serve a una cosa sola ma importante: capire in due
    secondi se il file aperto è l'ultimo o è quello vecchio rimasto nella
    memoria del browser. Va cambiato a ogni modifica del programma. */
-const VERSIONE='1.0', VERSIONE_DATA='7 settembre 2026';
+const VERSIONE='1.1', VERSIONE_DATA='11 settembre 2026';
 let state=load(), draft=null, viewId=null, pendingSend=null;
 /* aperta mentre una ricevuta si sta registrando: impedisce il doppio tocco */
 let salvataggioInCorso=false;
@@ -2622,6 +2623,29 @@ function labelREP(d){
 }
 function normAmt(el){ const v=el.value.trim(); el.value=v?fmtAmt(money(v)):''; calcTotal?.() }
 const MONTHS=['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
+/* Il mese scritto nella lingua del programma · i dodici nomi stanno nel
+   dizionario, minuscoli e maiuscoli, così una frase come «il rapporto di
+   agosto 2026» esce giusta in tutte e cinque le lingue. */
+const mese1=m=>TR(MONTHS[m-1]||'');
+const mese1G=m=>{const s=MONTHS[m-1]||'';return TR(s[0].toUpperCase()+s.slice(1))};
+/* «1 ricevuta» / «3 ricevute» · «1 riga» / «2 righe»
+   Le parole stanno qui e non nel dizionario grande: lì «ricevuta» in romeno
+   è «chitanța», con l'articolo, e «1 chitanța» non si dice. Il romeno vuole
+   anche il «de» davanti ai numeri da 20 in su: «20 de chitanțe», «101 chitanțe». */
+const CONTA={
+  ricevuta:{ro:'chitanță',en:'receipt',es:'recibo',pt:'recibo'},
+  ricevute:{ro:'chitanțe',en:'receipts',es:'recibos',pt:'recibos'},
+  riga:{ro:'rând',en:'line',es:'línea',pt:'linha'},
+  righe:{ro:'rânduri',en:'lines',es:'líneas',pt:'linhas'}};
+function conta(n,uno,tanti){
+  const l=lingua(), w=n===1?uno:tanti;
+  const p=l==='it'?w:((CONTA[w]||{})[l]||w);
+  const r=Math.abs(n)%100;
+  const de=l==='ro'&&n!==1&&n!==0&&(r===0||r>=20)?'de ':'';
+  return `${n} ${de}${p}`;
+}
+const nRic=n=>conta(n,'ricevuta','ricevute');
+const nRighe=n=>conta(n,'riga','righe');
 const MSHORT=['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
 function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2600)}
 function prefix(){return prefixFor(state.settings.year)}
@@ -3137,10 +3161,10 @@ function paintBackupAlert(){
   if(h) h.textContent=da?'Salva adesso':'Backup';
   if(e) e.textContent=da?'⚠️':'💾';
   const last=lsGet(BKKEY);
-  t.title=da
-    ? (last?`Dati non salvati · ultimo salvataggio ${new Date(last).toLocaleString('it-IT')}`
-           :'L\'archivio non è ancora mai stato salvato su file')
-    : (last?`Tutto salvato · ${new Date(last).toLocaleString('it-IT')}`:'Tutto salvato');
+  attrT(t,'title',da
+    ? (last?`${TR('Dati non salvati')} · ${TR('ultimo salvataggio')} ${new Date(last).toLocaleString('it-IT')}`
+           :TR('L\'archivio non è ancora mai stato salvato su file'))
+    : (last?`${TR('Tutto salvato')} · ${new Date(last).toLocaleString('it-IT')}`:TR('Tutto salvato')));
   paintRapportoAlert();
 }
 /* la tessera 📊 Rapporti, rossa come quella del backup quando il rapporto
@@ -3154,9 +3178,9 @@ function paintRapportoAlert(){
   const h=t.querySelector('h3'), e=t.querySelector('em');
   if(h) h.textContent=da?'Invia rapporto all\'Unione':'Rapporti';
   if(e) e.textContent=da?'⚠️':'📊';
-  t.title=da
-    ? `Il rapporto di ${mese} non è ancora stato inviato all\'Unione`
-    : 'Rapporto mensile all\'Unione, assemblea dei delegati e rapporti delle chiese';
+  attrT(t,'title',da
+    ? `${TR('Il rapporto di')} ${mese} ${TR('non è ancora stato inviato all\'Unione')}`
+    : TR('Rapporto mensile all\'Unione, assemblea dei delegati e rapporti delle chiese'));
 }
 
 /* ---------- ULTIMI MOVIMENTI ---------- */
@@ -3214,7 +3238,7 @@ function comboApri(id){
   box.innerHTML=trovati.length
     ? trovati.map(([n,c])=>`<button type="button" onmousedown="event.preventDefault()"
         onclick="comboScegli('${id}',this.dataset.n)" data-n="${esc(n)}">${esc(n)}
-        <span>${c} ${c===1?'ricevuta':'ricevute'}</span></button>`).join('')
+        <span>${nRic(c)}</span></button>`).join('')
     : `<div class="vuoto">Nessun nome con «${esc(inp.value.trim())}». Prova con meno lettere.</div>`;
   box.classList.add('show');
 }
@@ -3396,17 +3420,17 @@ function renderReceipts(){
     : '');
 
   $('recBoxSum').innerHTML=`<h3>Saldi attuali</h3><div class="sumbar" style="margin:0">`+
-    state.boxes.map(b=>`<div><span>💰 ${esc(b.name)}</span><b>${euro(boxBalance(b.name))}</b></div>`).join('')+
+    state.boxes.map(b=>`<div><span>💰 ${esc(TR(b.name))}</span><b>${euro(boxBalance(b.name))}</b></div>`).join('')+
     `<div><span>⇢ Da versare all\'Unione</span><b style="color:var(--violet)">${euro(cgPending())}</b></div>
      <div><span>⌂ Resta al campo</span><b style="color:var(--gold)">${euro(campoBalance())}</b></div></div>`;
 
   $('recRows').innerHTML=rows.length?rows.map(r=>{
-    const fu=[...new Set(r.lines.map(l=>l.fund))].join(', ');
-    const bo=[...new Set(r.lines.map(l=>l.box))].join(', ');
+    const fu=[...new Set(r.lines.map(l=>TR(l.fund)))].join(', ');
+    const bo=[...new Set(r.lines.map(l=>TR(l.box)))].join(', ');
     return `<tr class="${r.status==='void'?'voided':''}">
       <td><b>${esc(r.number)}</b>${r.status==='void'?' <span class="tag void">Annullata</span>':''}</td>
       <td>${fmtDate(r.date)}</td>
-      <td><span class="tag ${r.type==='Entrata'?'in':'out'}">${r.type}</span></td>
+      <td><span class="tag ${r.type==='Entrata'?'in':'out'}">${TR(r.type)}</span></td>
       <td>${esc(r.name)}</td><td>${esc(fu)}</td><td>${esc(bo)}</td>
       <td class="amt"${filtro?` title="Totale della ricevuta: ${euro(r.total)}"`:''}>${
         filtro?euro(r.lines.filter(keep).reduce((s,l)=>s+(+l.amount||0),0)):euro(r.total)}</td>
@@ -3418,7 +3442,7 @@ function renderReceipts(){
 function openReceipt(type,editId){
   const editing=state.receipts.find(r=>r.id===editId);
   draft={type:editing?editing.type:type,id:editing?editing.id:null,attachments:editing?[...(editing.attachments||[])]:[]};
-  $('mrTitle').textContent=editing?`Modifica ricevuta ${editing.number}`:`Nuova ricevuta in ${draft.type.toLowerCase()}`;
+  $('mrTitle').textContent=editing?`${TR('Modifica ricevuta')} ${editing.number}`:TR(draft.type==='Entrata'?'Nuova ricevuta in entrata':'Nuova ricevuta in uscita');
   $('mrSub').textContent='Scegli cassa e deposito per ogni riga';
   $('mrSave').textContent=editing?'Salva modifiche':'Conferma ricevuta';
   /* IL TASTO CHE CONFERMA E' VERDE, ANCHE IN USCITA.
@@ -3564,7 +3588,7 @@ function aggiornaBlocco(){
     let lucchetto=riga.querySelector('.lockmsg');
     if(bloccata&&!lucchetto){
       lucchetto=document.createElement('div'); lucchetto.className='lockmsg';
-      lucchetto.innerHTML=`🔒 Questa riga è già finita nel <b>rapporto all\'Unione</b> di ${esc(mese)}: non si tocca più.`;
+      lucchetto.innerHTML=`🔒 ${TR('Questa riga è già finita nel')} <b>${TR('rapporto all\'Unione')}</b> ${TR('di')} <b>${esc(mese)}</b>${TR(': non si tocca più.')}`;
       riga.appendChild(lucchetto);
     }else if(!bloccata&&lucchetto) lucchetto.remove();
   });
@@ -3580,11 +3604,11 @@ function aggiornaBlocco(){
          Puoi lavorare liberamente sulle <b>casse che restano al campo</b>; sulle altre, se davvero devi
          correggere, prima annulla l'invio di quel mese in <b>Rapporti</b>.</div>`
       : '')+(ft
-      ? `<div class="warn" style="margin-top:8px">📤 <b>Prima va chiuso il rapporto di ${esc(ft.mese)}.</b>
-         Il mese è finito e all\'Unione non è ancora partito niente: con questa data l'entrata non si
-         registra. Metti una data fino al <b>${esc(fmtDate(ft.fine))}</b> — le entrate di ${esc(ft.mese)}
-         si possono ancora scrivere — oppure vai in <b>📊 Rapporti</b> e invia il rapporto.
-         Questo controllo si spegne in <b>⚙️ Impostazioni</b>.</div>`
+      ? `<div class="warn" style="margin-top:8px">📤 <b>${TR('Prima va chiuso il rapporto di')} ${esc(ft.mese)}.</b>
+         ${TR('Il mese è finito e all\'Unione non è ancora partito niente: con questa data l\'entrata non si registra. Metti una data fino al')}
+         <b>${esc(fmtDate(ft.fine))}</b> ${TR('— le entrate di')} <b>${esc(ft.mese)}</b>
+         ${TR('si possono ancora scrivere — oppure vai in')} <b>📊 ${TR('Rapporti')}</b> ${TR('e invia il rapporto.')}
+         ${TR('Questo controllo si spegne in')} <b>⚙️ ${TR('Impostazioni')}</b>.</div>`
       : '');
   }
 }
@@ -5135,7 +5159,7 @@ function renderFunds(){
   $('boxList').innerHTML=state.boxes.map(b=>{
     const u=boxUses(b.name);
     return `<div class="rowitem">
-      <span class="rl"><b>💰 ${esc(b.name)}</b><small>${u?`Usato in ${u} ${u===1?'riga':'righe'} di ricevuta`:'Non ancora usato'}</small></span>
+      <span class="rl"><b>💰 ${esc(TR(b.name))}</b><small>${u?`${TR('Usato in')} ${nRighe(u)} ${TR('di ricevuta')}`:TR('Non ancora usato')}</small></span>
       <span class="rr"><span class="bal">${euro(boxBalance(b.name))}</span>
         <button class="btn light sm" onclick='renameBox(${js(b.name)})'>✏️ Modifica</button>
         <button class="btn light sm" onclick='delBox(${js(b.name)})'>🗑️ Elimina</button>
@@ -5162,7 +5186,7 @@ function renderFunds(){
     if(!fs.length) return '';
     const tit=g.id==='campo'
       ? '⌂ Solo campo · non vanno nel rapporto all\'Unione'
-      : `⇢ ${g.it} · blocco del rapporto all\'Unione`;
+      : `⇢ ${TR(g.it)} · ${TR('blocco del rapporto all\'Unione')}`;
     return `<div style="font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:6px 0 2px">${esc(tit)}</div>`+
       fs.map(f=>{
         const u=fundUses(f.name);
@@ -5172,9 +5196,9 @@ function renderFunds(){
         const p=pctOf(f);
         const quota=daVersareCassa(f.name);
         return `<div class="rowitem">
-          <span class="rl"><b>${esc(f.name)}</b><small>🇬🇧 ${esc(enOf(f))}${
-            p>0?` · <b style="color:var(--violet)">${fmtPct(p)}% all\'Unione</b> · da versare ${euro(quota)}`:' · resta tutta al campo'}${
-            cassaDettaglio(f)?' · 📝 descrizioni nel rapporto':''} · ${u?`usata in ${u} ${u===1?'riga':'righe'}`:'non ancora usata'}</small></span>
+          <span class="rl"><b>${esc(t(f.name))}</b><small>🇬🇧 ${esc(enOf(f))}${
+            p>0?` · <b style="color:var(--violet)">${fmtPct(p)}% ${TR('all\'Unione')}</b> · ${TR('da versare')} ${euro(quota)}`:' · '+TR('resta tutta al campo')}${
+            cassaDettaglio(f)?' · 📝 '+TR('descrizioni nel rapporto'):''} · ${u?`${TR('usata in')} ${nRighe(u)}`:t('non ancora usata')}</small></span>
           <span class="rr"><span class="bal">${euro(fundBalance(f.name))}</span>
             <span class="ordina">
               <button class="frecc" ${su?'':'disabled'} title="Spostala più in su" onclick='spostaFund(${js(f.name)},-1)'>▲</button>
@@ -5242,7 +5266,7 @@ function setFundPct(n,v){
   const nuova=pctBuona(v), vecchia=pctOf(f);
   if(nuova===vecchia){ renderFunds(); return }
   f.pct=nuova; persist(); renderFunds(); refresh();
-  toast(nuova>0?`«${n}»: ${fmtPct(nuova)}% all\'Unione`
+  toast(nuova>0?`«${TR(n)}»: ${fmtPct(nuova)}% ${TR('all\'Unione')}`
                :`«${n}»: resta tutta al campo`);
 }
 function setFundGruppo(n,g){
@@ -5397,13 +5421,13 @@ function meseDaChiudere(){
 }
 function etichettaMeseDaChiudere(){
   const p=meseDaChiudere();
-  return p?`${MONTHS[p.m-1]} ${p.y}`:'';
+  return p?`${mese1(p.m)} ${p.y}`:'';
 }
 /* fin dove si può scrivere un'entrata con il blocco acceso */
 function limiteEntrate(){
   if(!bloccoRapportoOn()) return null;
   const p=meseDaChiudere(); if(!p) return null;
-  return {fine:monthRange(p.y,p.m)[1],mese:`${MONTHS[p.m-1]} ${p.y}`};
+  return {fine:monthRange(p.y,p.m)[1],mese:`${mese1(p.m)} ${p.y}`};
 }
 /* questa entrata, con questa data, si può fare? */
 const entrataFuoriTermine=(tipo,data)=>{
@@ -5415,7 +5439,7 @@ const entrataFuoriTermine=(tipo,data)=>{
 function campoLockLabel(){
   const l=campoLockedTo(); if(!l) return '';
   const y=Number(l.slice(0,4)), m=Number(l.slice(5,7));
-  return `${MONTHS[m-1]} ${y}`;
+  return `${mese1(m)} ${y}`;
 }
 /* una riga è intoccabile? sì se è del Campo e la data è dentro il blocco */
 const rigaBloccata=(l,data)=>pctOf(l.fund)>0&&campoBloccato(data);
@@ -5636,21 +5660,21 @@ function renderReport(){
   const arretrato=arrotonda(d.total-d.quotaMese);
   $('rpBoxes').innerHTML=!sent&&arretrato>.004
     ? `<div class="warn">All\'Unione risultano ancora <b>${euro(arretrato)}</b> che vengono da
-       <b>mesi precedenti mai chiusi</b>. Questo rapporto versa soltanto la quota di ${esc(d.label)}:
+       <b>${TR('mesi precedenti mai chiusi')}</b>. ${TR('Questo rapporto versa soltanto la quota di')} ${esc(mese1G(m)+' '+y)}:
        per gli altri mesi apri il loro rapporto e mandalo.</div>`
     : '';
 
   $('rpBadge').innerHTML=sent
-    ? `<span class="badge ok">🔒 Inviato il ${new Date(sent.sentAt).toLocaleDateString('it-IT')}</span>`
+    ? `<span class="badge ok">🔒 ${TR('Inviato il')} ${new Date(sent.sentAt).toLocaleDateString('it-IT')}</span>`
     : (d.quotaMese>.004?'<span class="badge wait">⏳ Da inviare</span>'
                    :'<span class="badge wait">⏳ Da inviare · mese a zero</span>');
 
   $('rpCard').classList.toggle('locked',!!sent);
   $('rpNotes').value=sent?'':(rpNoteDraft[rpKey(y,m)]||'');
   $('rpNotes').readOnly=!!sent;
-  $('rpNotes').placeholder=sent
-    ? 'Rapporto già inviato: la nota di questo mese è stata mandata ed è conservata qui sotto.'
-    : 'Somme trattenute, versamenti parziali, qualcosa da spiegare…';
+  attrT($('rpNotes'),'placeholder',sent
+    ? TR('Rapporto già inviato: la nota di questo mese è stata mandata ed è conservata qui sotto.')
+    : TR('Somme trattenute, versamenti parziali, qualcosa da spiegare…'));
   paintNotaEn();
   $('rpDisbE').value=disb.eur?fmtAmt(disb.eur):'';
   $('rpDisbE').readOnly=!!sent;
@@ -5666,7 +5690,7 @@ function renderReport(){
        <button class="btn light" onclick="downloadFieldXlsx()">📊 Foglio Excel</button>`;
 
   $('rpStatus').innerHTML=sent
-    ? `<b>Rapporto chiuso.</b> Inviato il ${new Date(sent.sentAt).toLocaleString('it-IT')} · ${euro(sent.total)} scalati da ${esc(sent.box)}.
+    ? `<b>${TR('Rapporto chiuso.')}</b> ${TR('Inviato il')} ${new Date(sent.sentAt).toLocaleString('it-IT')} · ${euro(sent.total)} ${TR('scalati da')} ${esc(t(sent.box))}.
        Per riaprirlo devi annullare l'invio dallo storico qui sotto.
        ${sent.notes?`<div style="margin-top:8px;background:var(--gold-s);border:1px solid #ecdcb2;border-radius:10px;padding:9px 11px;color:#6d5514;white-space:pre-wrap">
          <b>✍️ Nota mandata all\'Unione:</b><br>${esc(sent.notes)}</div>`
@@ -5678,7 +5702,7 @@ function alreadySent(){
   const {m,y}=rpSel(), s=sentReport(y,m);
   if(!s) return;
   alert(`⛔ QUESTO RAPPORTO È GIÀ STATO INVIATO\n\n`+
-    `${MONTHS[m-1]} ${y}\n`+
+    `${mese1(m)} ${y}\n`+
     `Inviato il ${new Date(s.sentAt).toLocaleString('it-IT')}\n`+
     `Importo versato: ${euro(s.total)} · scalato da ${s.box}\n\n`+
     `I soldi sono già stati prelevati e il conto con l\'Unione è già azzerato. `+
@@ -5694,7 +5718,7 @@ function sendReport(){
   /* Anche il rapporto a zero si manda: all'Unione serve sapere
      che quel mese non è stato raccolto niente. Il silenzio non è un rapporto. */
   if(d.quotaMese<=0.004&&!confirm(
-      `IL RAPPORTO DI ${MONTHS[m-1].toUpperCase()} ${y} È A ZERO\n\n`+
+      `${TR('IL RAPPORTO DI')} ${mese1(m).toUpperCase()} ${y} ${TR('È A ZERO')}\n\n`+
       `Questo mese non c'è niente da versare all\'Unione.\n\n`+
       `Vuoi mandarlo lo stesso? Loro ricevono il rapporto con tutte le casse a zero,\n`+
       `così sanno che il mese è stato chiuso e non manca un foglio.`)) return;
@@ -5704,7 +5728,7 @@ function sendReport(){
   $('askBody').innerHTML=`
     <div class="ask">
       <h4>✍️ Vuoi scrivere una nota all\'Unione?</h4>
-      <p>Stai per inviare il rapporto di <b>${MONTHS[m-1]} ${y}</b> per <b>${euro(d.quotaMese)}</b>.
+      <p>${TR('Stai per inviare il rapporto di')} <b>${mese1(m)} ${y}</b> ${TR('per')} <b>${euro(d.quotaMese)}</b>.
       Se hai trattenuto qualcosa, se un versamento è parziale o se c'è qualcosa da spiegare, scrivilo adesso:
       la nota finisce sul rapporto in PDF che ricevono loro.</p>
     </div>
@@ -5754,21 +5778,20 @@ function openSendSheet(){
   const casse=Object.entries(bd).filter(([,v])=>Math.abs(v)>.004);
   $('sendBody').innerHTML=`
     <div class="note">${total>.004
-      ? `Stai per registrare il versamento all\'Unione di <b>${euro(total)}</b> per ${MONTHS[m-1]} ${y}.
-         Le quote qui sotto tornano a zero e l'importo viene scalato dalla banca.`
-      : `Stai per chiudere <b>${MONTHS[m-1]} ${y}</b> con un rapporto <b>a zero</b>: questo mese non c'è
-         niente da versare. Non viene scalato niente da nessun deposito, ma l\'Unione riceve
-         il foglio del mese con tutte le casse.`}</div>
+      ? `${TR('Stai per registrare il versamento all\'Unione di')} <b>${euro(total)}</b> ${TR('per')} <b>${mese1(m)} ${y}</b>.
+         ${TR('Le quote qui sotto tornano a zero e l\'importo viene scalato dalla banca.')}`
+      : `${TR('Stai per chiudere')} <b>${mese1(m)} ${y}</b> ${TR('con un rapporto')} <b>${TR('a zero')}</b>:
+         ${TR('questo mese non c\'è niente da versare. Non viene scalato niente da nessun deposito, ma l\'Unione riceve il foglio del mese con tutte le casse.')}`}</div>
     <div class="tw" style="margin-top:12px"><table style="min-width:0;width:100%">
       <thead><tr><th style="white-space:normal">Cassa</th><th class="amt" style="white-space:normal">Importo versato</th></tr></thead>
       <tbody>${casse.length?casse.map(([k,v])=>
-      `<tr><td>${esc(k)} <small style="color:var(--muted)">· ${esc(enOf(k))}</small></td><td class="amt">${euro(v)}</td></tr>`).join('')
+      `<tr><td>${esc(t(k))} <small style="color:var(--muted)">· ${esc(enOf(k))}</small></td><td class="amt">${euro(v)}</td></tr>`).join('')
       :'<tr><td colspan="2" class="empty">Nessuna quota da versare questo mese</td></tr>'}
       <tr><td><b>Totale</b></td><td class="amt"><b>${euro(total)}</b></td></tr></tbody></table></div>
     <div class="grid" style="margin-top:12px">
       <div class="field"><label>Scala l'importo dal deposito</label><select id="sendBox" onchange="avvisoDeposito()">
-        ${state.boxes.map(b=>`<option value="${esc(b.name)}"${defaultSendBox()===b.name?' selected':''}>${esc(b.name)} · saldo ${euro(boxBalance(b.name))}</option>`).join('')}
-        <option value="">Non scalare da nessun deposito</option></select></div>
+        ${state.boxes.map(b=>`<option value="${esc(b.name)}"${defaultSendBox()===b.name?' selected':''}>${esc(t(b.name))} · ${TR('saldo')} ${euro(boxBalance(b.name))}</option>`).join('')}
+        <option value="">${TR('Non scalare da nessun deposito')}</option></select></div>
       <div class="field"><label>Data del versamento</label><input id="sendDate" type="date" value="${end}"></div>
     </div>
     <div id="sendAvviso"></div>
@@ -5776,7 +5799,7 @@ function openSendSheet(){
     <div class="rowlist">
       <div class="filebox"><em>📄</em><div><b>Rapporto_Unione_${rpKey(y,m)}.pdf</b><small>Il foglio dell'Unione, nella lingua del programma, con gli importi nella moneta scelta</small></div></div>
       <div class="filebox"><em>📊</em><div><b>Rapporto_Unione_${rpKey(y,m)}.xlsx</b><small>Gli stessi numeri in Excel, con le righe per le firme</small></div></div>
-      <div class="filebox"><em>✉️</em><div><b>Mail già pronta per ${esc(state.settings.fieldMail||'l\'Unione')}</b><small>Con l'allegato dentro, oggetto e testo nella lingua del programma${state.settings.churchMail?', copia a '+esc(state.settings.churchMail):''}</small></div></div>
+      <div class="filebox"><em>✉️</em><div><b>${TR('Mail già pronta per')} ${esc(state.settings.fieldMail||TR('l\'Unione'))}</b><small>${TR('Con l\'allegato dentro, oggetto e testo nella lingua del programma')}${state.settings.churchMail?', '+TR('copia a')+' '+esc(state.settings.churchMail):''}</small></div></div>
     </div>
     <div class="warn" style="margin-top:12px">Dopo la conferma questo rapporto <b>non potrà più essere inviato</b>.</div>`;
   $('mSend').classList.add('show');
@@ -5935,7 +5958,7 @@ function viewFieldReport(){
 function resendField(){
   const {m,y}=rpSel(), s=sentReport(y,m);
   if(!s) return;
-  if(!confirm(`Rimandare all\'Unione il rapporto di ${MONTHS[m-1]} ${y}?\n\n`+
+  if(!confirm(`${TR('Rimandare all\'Unione il rapporto di')} ${mese1(m)} ${y}?\n\n`+
     `I conti NON vengono toccati: è già stato registrato il ${new Date(s.sentAt).toLocaleDateString('it-IT')}.\n`+
     `Viene solo ricreato il PDF e riaperta la mail.`)) return;
   shareFieldDocs(y,m);
@@ -6420,7 +6443,7 @@ function vediRicevuteChiesa(id){
   soloRicevute={ids:new Set(rr.map(r=>r.id)),titolo:`${c.chiesa} · ${c.periodo}`};
   go('receipts');
   azzeraFiltriRicevute();
-  toast(`${rr.length} ${rr.length===1?'ricevuta':'ricevute'} del rapporto ${c.periodo}`);
+  toast(`${nRic(rr.length)} ${TR('del rapporto')} ${c.periodo}`);
 }
 function eliminaRapportoChiesa(id){
   const c=(state.chiese||[]).find(x=>x.id===id); if(!c) return;
@@ -6467,18 +6490,18 @@ function renderTx(){
   const shown=list.filter(r=>{
     if(!q) return true;
     const y=Number(String(r.key).slice(0,4)), m=Number(String(r.key).slice(5,7));
-    const hay=[r.key,MONTHS[m-1]||'',y,r.box,r.notes,euro(r.total),
+    const hay=[r.key,MONTHS[m-1]||'',mese1(m),y,r.box,r.notes,euro(r.total),
       new Date(r.sentAt||Date.now()).toLocaleDateString('it-IT')].join(' ').toLowerCase();
     return hay.includes(q);
   });
   $('txList').innerHTML=shown.length?shown.map(r=>{
     const y=Number(String(r.key).slice(0,4)), m=Number(String(r.key).slice(5,7));
     const tx=(state.transmissions||[]).find(t=>t.key===r.key);
-    const mese=`${(MONTHS[m-1]||'').replace(/^./,c=>c.toUpperCase())} ${y}`;
+    const mese=`${mese1G(m)} ${y}`;
     return `<div class="rowitem" style="align-items:flex-start">
       <span class="rl">
         <b>📄 ${esc(mese)} · ${euro(r.total)}</b>
-        <small>Inviato il ${new Date(r.sentAt||r.date).toLocaleString('it-IT')} · scalato da ${esc(r.box||'nessun deposito')}</small>
+        <small>${TR('Inviato il')} ${new Date(r.sentAt||r.date).toLocaleString('it-IT')} · ${TR('scalato da')} ${esc(t(r.box||'nessun deposito'))}</small>
         ${r.notes?`<small style="color:#6d5514;background:var(--gold-s);border-radius:8px;padding:4px 8px;margin-top:5px;display:block;white-space:pre-wrap">✍️ ${esc(r.notes)}</small>`:''}
       </span>
       <span class="rr" style="flex-wrap:wrap;gap:6px">
@@ -7419,7 +7442,7 @@ function spiegaREP(mese){
     `e da lì non parte niente.`;
   if(l==='it') return it;
   const m=RTXT['spiega'][l]; if(!m) return it;
-  return m.replace('§MONETA§',l==='en'?nomeValutaEn():nomeValuta().toLowerCase()).replace('§MESE§',mese);
+  return m.replace('§MONETA§',l==='en'?nomeValutaEn():TR(nomeValuta()).toLowerCase()).replace('§MESE§',mese);
 }
 
 /* --- elenco ricevute di una persona: PDF e Excel --- */
@@ -7554,25 +7577,25 @@ function buildChRef(){
   const sel=$('chRef'), ys=chYears(), o=[];
   const add=(label,f,t)=>o.push(`<option data-f="${f}" data-t="${t}">${esc(label)}</option>`);
   if(chPeriod==='month'){
-    ys.forEach(y=>MONTHS.forEach((n,i)=>{const[f,t]=monthRange(+y,i+1);add(`${n[0].toUpperCase()+n.slice(1)} ${y}`,f,t)}));
+    ys.forEach(y=>MONTHS.forEach((n,i)=>{const[f,a]=monthRange(+y,i+1);add(`${mese1G(i+1)} ${y}`,f,a)}));
   }else if(chPeriod==='quarter'){
     ys.forEach(y=>[1,2,3,4].forEach(q=>{
       const f=`${y}-${String((q-1)*3+1).padStart(2,'0')}-01`;
       const t=monthRange(+y,q*3)[1];
-      add(`${q}° Trimestre ${y}`,f,t);
+      add(`${q}° ${TR('Trimestre')} ${y}`,f,t);
     }));
   }else if(chPeriod==='year'){
     /* anno, biennio e triennio si fermano a OGGI quando l'ultimo anno è ancora
        in corso: il rapporto dice quello che c'è davvero fino al giorno in cui
        lo si guarda, non un periodo che deve ancora finire */
-    ys.forEach(y=>add(`Anno ${y}`,`${y}-01-01`,finoAOggi(`${y}-12-31`)));
+    ys.forEach(y=>add(`${TR('Anno')} ${y}`,`${y}-01-01`,finoAOggi(`${y}-12-31`)));
   }else if(chPeriod==='biennium'){
-    ys.forEach(y=>add(`Biennio ${+y-1}–${y}`,`${+y-1}-01-01`,finoAOggi(`${y}-12-31`)));
+    ys.forEach(y=>add(`${TR('Biennio')} ${+y-1}–${y}`,`${+y-1}-01-01`,finoAOggi(`${y}-12-31`)));
   }else if(chPeriod==='triennium'){
     /* il triennio è il periodo dell'assemblea dei delegati: tre anni */
-    ys.forEach(y=>add(`Triennio ${+y-2}–${y}`,`${+y-2}-01-01`,finoAOggi(`${y}-12-31`)));
+    ys.forEach(y=>add(`${TR('Triennio')} ${+y-2}–${y}`,`${+y-2}-01-01`,finoAOggi(`${y}-12-31`)));
   }else{
-    add('Date scelte a mano',$('chFrom').value||'',$('chTo').value||'');
+    add(TR('Date scelte a mano'),$('chFrom').value||'',$('chTo').value||'');
   }
   sel.innerHTML=o.join('');
   sel.disabled=chPeriod==='custom';
@@ -7581,7 +7604,7 @@ function buildChRef(){
     const n=new Date(),y=String(n.getFullYear());
     let i=-1;
     if(chPeriod==='month') i=[...sel.options].findIndex(x=>x.dataset.f.slice(0,7)===`${y}-${String(n.getMonth()+1).padStart(2,'0')}`);
-    else if(chPeriod==='quarter') i=[...sel.options].findIndex(x=>x.textContent===`${Math.floor(n.getMonth()/3)+1}° Trimestre ${y}`);
+    else if(chPeriod==='quarter') i=[...sel.options].findIndex(x=>x.textContent===`${Math.floor(n.getMonth()/3)+1}° ${TR('Trimestre')} ${y}`);
     else i=[...sel.options].findIndex(x=>x.textContent.includes(y));
     sel.selectedIndex=i>=0?i:0;
   }
@@ -7806,20 +7829,20 @@ function paintVarie(d){
     return `<div style="margin-top:9px">
       <div style="display:flex;justify-content:space-between;gap:10px;font-size:12.5px;flex-wrap:wrap">
         <span style="min-width:0"><b>${esc(lab)}</b>${extra?` <span style="color:var(--muted)">${esc(extra)}</span>`:''}</span>
-        <span style="color:${col};font-weight:800;white-space:nowrap">${euro(v)} <span style="color:var(--muted);font-weight:600">su ${euro(lim)}</span></span>
+        <span style="color:${col};font-weight:800;white-space:nowrap">${euro(v)} <span style="color:var(--muted);font-weight:600">${TR('su')} ${euro(lim)}</span></span>
       </div>
       <div style="height:9px;border-radius:999px;background:#eceff3;margin-top:5px;overflow:hidden">
         <div style="height:100%;width:${largo}%;background:${col};border-radius:999px"></div>
       </div>
-      ${q>=1?`<div style="font-size:12px;color:${col};font-weight:700;margin-top:4px">⚠️ Superato di ${euro(v-lim)}</div>`:''}
+      ${q>=1?`<div style="font-size:12px;color:${col};font-weight:700;margin-top:4px">⚠️ ${TR('Superato di')} ${euro(v-lim)}</div>`:''}
     </div>`;
   };
   box.innerHTML=`<div class="note" style="background:#fff">
-    <b>🧾 Controllo della voce «Varie»</b> — la regola è <b>${euro(VARIE_ANNO)} all'anno</b>
-    (circa ${euro(VARIE_ANNO/12)} al mese) e <b>${euro(VARIE_TRIENNIO)} in tre anni</b>.
-    ${riga('Nel periodo scelto',d.varie,VARIE_ANNO*durataInAnni(d.f,d.t),d.label)}
-    ${riga(`Anno ${y}`,annoV,VARIE_ANNO)}
-    ${riga(`Triennio ${y-2}–${y}`,triV,VARIE_TRIENNIO)}
+    <b>🧾 ${TR('Controllo della voce «Varie»')}</b> ${TR('— la regola è')} <b>${euro(VARIE_ANNO)} ${TR('all\'anno')}</b>
+    (${TR('circa')} ${euro(VARIE_ANNO/12)} ${TR('al mese')}) ${TR('e')} <b>${euro(VARIE_TRIENNIO)} ${TR('in tre anni')}</b>.
+    ${riga(TR('Nel periodo scelto'),d.varie,VARIE_ANNO*durataInAnni(d.f,d.t),d.label)}
+    ${riga(`${TR('Anno')} ${y}`,annoV,VARIE_ANNO)}
+    ${riga(`${TR('Triennio')} ${y-2}–${y}`,triV,VARIE_TRIENNIO)}
     <div style="font-size:12px;color:var(--muted);margin-top:9px">Nel periodo scelto il limite è in proporzione ai giorni:
       un trimestre vale un quarto dell'anno. Si conta la <b>voce</b> «Varie» del rapporto — le spese piccole messe
       insieme in una riga sola — e non la <b>cassa</b> Varie: una spesa fatta da quella cassa, se ha la sua
@@ -7869,7 +7892,7 @@ function sFoot(s,n){
   x.strokeStyle='#e6eaf0'; x.lineWidth=2;
   x.beginPath(); x.moveTo(90,SH-72); x.lineTo(SW-90,SH-72); x.stroke();
   x.fillStyle='#8a97a6'; x.font=SF(400,28);
-  x.fillText(`${state.settings.church}  ·  ${t('Rapporto di Tesoreria')}  ·  ${chLabel()}`,90,SH-34);
+  x.fillText(`${state.settings.church}  ·  ${TR('Rapporto di Tesoreria')}  ·  ${chLabel()}`,90,SH-34);
   x.textAlign='right'; x.fillStyle='#41546b'; x.font=SF(700,30); x.fillText(String(n),SW-90,SH-34); x.textAlign='left';
 }
 /* ══════════════════════════════════════════════════════════
@@ -8226,7 +8249,7 @@ function printChurch(){
     <table><tbody>${x.html}<tr class="tot"><td>Totale</td><td class="r">${euro(x.tot)}</td></tr></tbody></table>`;
   printNodes(`<div class="a5 in" style="width:210mm;min-height:290mm;height:auto">
     <div class="a5-band"><img src="${LOGO}"><div>
-      <div class="org">${t('Rapporto di Tesoreria')} · ${t('Assemblea dei delegati')}</div>
+      <div class="org">${TR('Rapporto di Tesoreria')} · ${TR('Assemblea dei delegati')}</div>
       <div class="sub">${esc(state.settings.church)}</div>
       <div class="addr">${esc(d.label)} · dal ${fmtDate(d.f)} al ${fmtDate(d.t)}</div></div></div>
     <div class="a5-body" style="padding:6mm 10mm">
@@ -8352,8 +8375,8 @@ function renderPeople(){
         : `<button class="btn light sm" onclick='apriStato("${kind}",${js(p.name)})' title="Trasferito, escluso o deceduto">🚚 Stato</button>`;
       return `<div class="rowitem"${statoAperto(p)?' style="opacity:.72"':''}>
       <span class="rl"><b>${esc(p.name)}</b>${tipo}${st}
-        <small>${n} ricevute · ${euro(personTotal(p.name))}</small>
-        ${rec?`<small style="color:var(--blue)">${rec}</small>`:'<small style="color:var(--gold)">Nessun telefono</small>'}</span>
+        <small>${nRic(n)} · ${euro(personTotal(p.name))}</small>
+        ${rec?`<small style="color:var(--blue)">${rec}</small>`:`<small style="color:var(--gold)">${TR('Nessun telefono')}</small>`}</span>
       <span class="rr">
         <button class="btn blue sm" onclick='openPerson("${kind}",${js(p.name)})'>🧾 Ricevute</button>
         <button class="btn light sm" onclick='editPerson("${kind}",${js(p.name)})'>✏️ Scheda</button>
@@ -8408,7 +8431,7 @@ function etichettaStato(p){
   const [ico,lab]=STATI[s.tipo]||['•',s.tipo];
   /* la parola passa dal dizionario: questa etichetta si vede sullo schermo
      e finisce stampata sul foglio dell'anagrafica */
-  return `${ico} ${t(lab)}${s.da?' '+t('dal')+' '+fmtDate(s.da):''}`;
+  return `${ico} ${TR(lab)}${s.da?' '+t('dal')+' '+fmtDate(s.da):''}`;
 }
 
 /* ---------- nella scheda della persona ---------- */
@@ -8633,8 +8656,8 @@ function pvRows(){
     .sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id);
 }
 function pvLabel(){
-  if(pv.period==='all'||(!pv.from&&!pv.to)) return 'Tutto lo storico';
-  return `Dal ${fmtDate(pv.from)} al ${fmtDate(pv.to)}`;
+  if(pv.period==='all'||(!pv.from&&!pv.to)) return TR('Tutto lo storico');
+  return `${TR('Dal')} ${fmtDate(pv.from)} ${TR('al')} ${fmtDate(pv.to)}`;
 }
 /* le ricevute della scheda aperta adesso · le sfogliano le frecce ‹ › della ricevuta */
 let elencoPersona=[];
@@ -8673,7 +8696,7 @@ function renderPerson(){
   const fu=Object.entries(byFund).sort((a,b)=>b[1]-a[1]);
 
   $('mpTitle').textContent=p.name;
-  $('mpSub').textContent=`${valid.length} ricevute · ${euro(tot)} · ${pvLabel()}`;
+  $('mpSub').textContent=`${nRic(valid.length)} · ${euro(tot)} · ${pvLabel()}`;
 
   const links=[
     p.tel?`<a class="linkbtn" href="${esc(telHref(p.tel))}">📞 ${esc(p.tel)}</a>`:'',
@@ -9026,7 +9049,7 @@ function renderSearch(){
       const n=live().filter(r=>r.name===p.name);
       return `<button class="sr-item" onclick='srVai("persona",${js(k+"|"+p.name)})'>
         <em>${k==='contributors'?'👤':'🏢'}</em>
-        <span><b>${esc(p.name)}</b><small>${k==='contributors'?'Contribuente':'Fornitore'} · ${n.length} ricevute</small></span>
+        <span><b>${esc(p.name)}</b><small>${TR(k==='contributors'?'Contribuente':'Fornitore')} · ${nRic(n.length)}</small></span>
         <span class="amt">${euro(n.reduce((s,r)=>s+r.total,0))}</span></button>`;
     }).join('')+'</div>');
 
@@ -9108,6 +9131,10 @@ function diDigita(){
 }
 function openDataImport(){
   diCols=[]; diRows=[]; diMap={};
+  /* le intestazioni dell'esempio seguono la lingua; la riga di dati resta
+     italiana apposta: è un ESEMPIO di formato, non un pezzo di interfaccia */
+  const intest=['Data','Numero','Tipo','Nominativo','Descrizione','Cassa','Deposito','Importo'].map(TR).join(';');
+  attrT($('diText'),'placeholder',intest+'\n03/08/2026;26CA0001E;entrata;Mario Rossi;decima agosto;Decima;Contanti;120,00');
   $('diText').value=''; $('diFile').value='';
   $('diInfo').innerHTML=''; $('diMap').innerHTML=''; $('diPreview').innerHTML='';
   $('diGo').disabled=true;
@@ -9936,7 +9963,7 @@ function anagraficaPages(){
   out.forEach((c,n)=>{
     const x=c.getContext('2d');
     x.fillStyle='#9aa4b0'; x.font=F(400,2.7); x.textAlign='center';
-    x.fillText(`${state.settings.church} · ${t('pagina')} ${n+1}/${out.length}`,AW/2,AH-Math.round(6*APX));
+    x.fillText(`${state.settings.church} · ${TR('pagina')} ${n+1}/${out.length}`,AW/2,AH-Math.round(6*APX));
     x.textAlign='left';
   });
   return out;
@@ -9954,6 +9981,13 @@ function anagraficaPdf(){
 }
 
 /* ---------- IMPOSTAZIONI ---------- */
+/* «7 settembre 2026» · il mese passa dal dizionario come tutti gli altri.
+   Si riscrive a ogni giro delle impostazioni, così segue il cambio di lingua. */
+function scriviDataVersione(){
+  const el=$('stVerData'); if(!el) return;
+  el.textContent=VERSIONE_DATA.replace(
+    /\b(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\b/,x=>TR(x));
+}
 function renderSettings(){
   const s=state.settings;
   $('stChurch').value=s.church; $('stCode').value=s.code; $('stAddr').value=s.address||'';
@@ -9968,10 +10002,11 @@ function renderSettings(){
     cb.checked=bloccoRapportoOn();
     const mese=etichettaMeseDaChiudere();
     $('stBloccoRapTxt').textContent=mese
-      ? `Adesso è in sospeso il rapporto di ${mese}.`
-      : 'Adesso non c\'è nessun rapporto in sospeso.';
+      ? `${TR('Adesso è in sospeso il rapporto di')} ${mese}.`
+      : TR('Adesso non c\'è nessun rapporto in sospeso.');
   }
   renderSign(); renderLogo(); renderBlocco(); paintSpazio(); renderLingua(); renderValuta();
+  scriviDataVersione();
 }
 /* ══════════════════════════════════════════════════════════
    LA TENDINA DELLA MONETA
@@ -9984,8 +10019,10 @@ function renderSettings(){
 function renderValuta(){
   const sel=$('stValuta'); if(!sel) return;
   const v=valuta();
+  /* il nome della moneta passa da t(): dentro un <option> non si possono
+     mettere pezzi separati, quindi si traduce qui la parola e basta */
   sel.innerHTML=Object.entries(VALUTE).map(([k,d])=>
-    `<option value="${k}"${k===v?' selected':''}>${d.ban} ${d.nome} ${d.sim}</option>`).join('');
+    `<option value="${k}"${k===v?' selected':''}>${d.ban} ${esc(TR(d.nome))} ${d.sim}</option>`).join('');
   const n=$('valutaNota'); if(!n) return;
   n.innerHTML=`La moneta scelta viene scritta <b>dappertutto</b>: ricevute, rapporti, diapositive,
     Excel e schermate. <b>Gli importi non si convertono</b> — un 100 registrato resta 100, cambia
@@ -10001,9 +10038,7 @@ function renderLingua(){
   const n=$('langNota'); if(!n) return;
   n.innerHTML=l==='it'
     ? `Il programma è nato in italiano: in italiano è tradotto tutto, dalla prima all'ultima parola.`
-    : `<b>Quello che non è ancora tradotto resta in italiano</b> — non sparisce mai niente.
-       La traduzione copre menu, pulsanti, etichette e messaggi brevi; le spiegazioni lunghe e la
-       <b>guida</b> sono ancora in italiano. Le immagini della guida mostrano il programma in italiano.`;
+    : `<b>${TR('Tutto il programma è tradotto')}</b>${TR(': menu, pulsanti, messaggi, rapporti, ricevute e guida. Le immagini della guida mostrano il programma in italiano.')}`;
 }
 /* i due prossimi numeri, aggiornati mentre si cambiano codice, anno e zeri */
 function stRefresh(){
@@ -10635,7 +10670,7 @@ async function renderCopie(){
       <b>Non bastano da sole</b>: se il dispositivo si rompe se ne vanno con lui, quindi il backup su file va fatto lo stesso.</p>
     ${l.length?`<div class="rowlist" style="margin-top:10px">${l.map(c=>
       `<div class="rowitem"><span class="rl"><b>🛟 ${new Date(c.at).toLocaleString('it-IT')}</b>
-        <small>${c.n} ricevute · ${esc(c.church||'')} · ${(c.dati.length/1024).toFixed(0)} KB</small></span>
+        <small>${nRic(c.n)} · ${esc(c.church||'')} · ${(c.dati.length/1024).toFixed(0)} KB</small></span>
        <span class="rr"><button class="btn light sm" onclick="ripristinaCopia('${c.k}')">♻️ Rimetti questa</button></span></div>`).join('')}</div>`
       :'<div class="warn" style="margin-top:10px">Nessuna copia ancora. Se ne crea una al primo salvataggio.</div>'}`;
 }
@@ -10651,7 +10686,7 @@ async function ripristinaCopia(k){
     dopoImportazione();              /* firma in memoria + filtri su «Tutto» */
     segnaOperazione('copia','copia di sicurezza del dispositivo',state.receipts.length);
     persist(); refresh(); go('home');
-    toast('Copia rimessa · '+state.receipts.length+' ricevute');
+    toast(TR('Copia rimessa')+' · '+nRic(state.receipts.length));
   }catch(e){ console.error(e); toast('Questa copia non si riesce a leggere') }
 }
 
@@ -11127,7 +11162,7 @@ function renderOffline(){
         <b>sul dispositivo</b>, si lavora e si salva senza rete: internet serve solo ad aprire il programma
         quando lo apri da un indirizzo web.</div>
     </div>
-    <div style="margin-top:10px;font-size:12px;color:var(--muted)">Stato adesso: ${su?'collegato':'senza rete'} · ${modo==='file'?'aperto dal file':'aperto da un indirizzo web'}${sw?' · guardiano attivo':' · nessun guardiano'}${dove&&dove.casa?' · aperto dall\'icona':''}</div>`;
+    <div style="margin-top:10px;font-size:12px;color:var(--muted)">${TR('Stato adesso:')} ${TR(su?'collegato':'senza rete')} · ${TR(modo==='file'?'aperto dal file':'aperto da un indirizzo web')} · ${TR(sw?'guardiano attivo':'nessun guardiano')}${dove&&dove.casa?' · '+TR('aperto dall\'icona'):''}</div>`;
   /* il file c'è davvero? si va a vedere, e la risposta compare qui sotto */
   if(modo==='web'){
     const nota=document.createElement('div');
@@ -11584,7 +11619,7 @@ function renderData(){
   navigator.storage?.estimate?.().then(e=>{
     const el=$('spQuota'), us=$('spUsato'); if(!e) return;
     const q=e.quota||0, u=e.usage||0;
-    if(el) el.textContent=q?`${MB(q-u)} liberi su ${MB(q)}`:'non dichiarato dal browser';
+    if(el) el.textContent=q?`${MB(q-u)} ${TR('liberi su')} ${MB(q)}`:TR('non dichiarato dal browser');
     if(us) us.textContent=MB(u);
     /* Sotto il giga l'archivio non è «grande»: se ci sono anni di ricevute con
        le fatture attaccate, lo spazio finisce sul serio. Meglio dirglielo
@@ -11845,7 +11880,7 @@ mappa:{t:'Cum este făcut programul',
  ['Butonul <b>⛪ Rapoartele bisericilor</b>','Duce direct la caseta unde se importă rapoartele trimise de biserici. Este lucrul pe care îl vei face cel mai des după chitanțe.','']],
  more:'<div class="note">Nu există niciun buton «salvează» pentru chitanțe: <b>tot ce confirmi este deja înregistrat</b>. «Salvează acum» privește doar <b>copia pe fișier</b>.</div>'},
 
-primavolta:{t:'Prima dată: pune datele bisericii tale',
+primavolta:{t:'Prima dată: pune datele câmpului tău',
  lead:'Cinci minute în Setări și programul devine cel al bisericii tale.',
  cap:'Primul careu din Setări: de aici iese tot ce se citește pe documente.',
  s:[
@@ -12308,7 +12343,7 @@ mappa:{t:'How the program is laid out',
  ['The <b>⛪ Church reports</b> tile','It takes you straight to the card where the reports the churches send you are imported. It is the thing you will do most often after the receipts.','']],
  more:'<div class="note">There is no «save» button for receipts: <b>everything you confirm is already recorded</b>. «Save now» is only about the <b>copy to a file</b> — the backup.</div>'},
 
-primavolta:{t:'The first time: enter your church’s details',
+primavolta:{t:'The first time: enter your field’s details',
  lead:'Five minutes in Settings and the program becomes your church’s.',
  cap:'The first Settings card: everything printed on the documents comes from here.',
  s:[
@@ -12772,7 +12807,7 @@ mappa:{t:'Cómo está hecho el programa',
  ['El botón <b>⛪ Informes de las iglesias</b>','Lleva directo al recuadro donde se importan los informes que te mandan las iglesias. Es lo que harás más a menudo después de los recibos.','']],
  more:'<div class="note">No hay ningún botón «guardar» para los recibos: <b>todo lo que confirmas ya está registrado</b>. «Guardar ahora» se refiere solo a la <b>copia en archivo</b>.</div>'},
 
-primavolta:{t:'La primera vez: pon los datos de tu iglesia',
+primavolta:{t:'La primera vez: pon los datos de tu campo',
  lead:'Cinco minutos en Ajustes y el programa se convierte en el de tu iglesia.',
  cap:'La primera tarjeta de Ajustes: de aquí sale todo lo que se lee en los documentos.',
  s:[
@@ -13235,7 +13270,7 @@ mappa:{t:'Como é feito o programa',
  ['O botão <b>⛪ Relatórios das igrejas</b>','Leva direto ao quadro onde se importam os relatórios que as igrejas te enviam. É o que vais fazer mais vezes depois dos recibos.','']],
  more:'<div class="note">Não há nenhum botão «guardar» para os recibos: <b>tudo o que confirmas já está registado</b>. «Guardar agora» diz respeito só à <b>cópia em ficheiro</b>.</div>'},
 
-primavolta:{t:'A primeira vez: põe os dados da tua igreja',
+primavolta:{t:'A primeira vez: põe os dados do teu campo',
  lead:'Cinco minutos nas Definições e o programa passa a ser o da tua igreja.',
  cap:'O primeiro cartão das Definições: daqui sai tudo o que se lê nos documentos.',
  s:[
@@ -14373,7 +14408,7 @@ function disegnaSpazio(){
     if(!q||pc<90){ el.innerHTML=''; return }
     const y=anniAttivi()[0];
     el.innerHTML=`<div class="warn" style="margin:0 0 12px">
-      <b>Lo spazio del dispositivo sta finendo</b> — ${pesoMB(Math.max(0,q-u))} liberi su ${pesoMB(q)}.
+      <b>${TR('Lo spazio del dispositivo sta finendo')}</b> — ${pesoMB(Math.max(0,q-u))} ${TR('liberi su')} ${pesoMB(q)}.
       ${y?`Il modo per liberarne è <b>archiviare l'anno più vecchio</b> e, se serve, togliere gli allegati
       degli anni già archiviati: le ricevute non si perdono e restano consultabili in 📦 Archivio.`:''}
       ${y?`<div class="toolbar" style="margin-top:10px">
@@ -14560,10 +14595,10 @@ async function renderArchive(){
     return `
     <div class="rowitem" style="align-items:flex-start">
       <span class="rl">
-        <b>📦 Anno ${esc(a.year)}</b>
-        <small>${a.n} ${a.n===1?'ricevuta':'ricevute'} · ${a.inviati||0} ${a.inviati===1?'rapporto inviato':'rapporti inviati'}
-          · ${na} ${na===1?'allegato':'allegati'}
-          · archiviato il ${new Date(a.at).toLocaleDateString('it-IT')}</small>
+        <b>📦 ${TR('Anno')} ${esc(a.year)}</b>
+        <small>${nRic(a.n)} · ${a.inviati||0} ${TR(a.inviati===1?'rapporto inviato':'rapporti inviati')}
+          · ${na} ${TR(na===1?'allegato':'allegati')}
+          · ${TR('archiviato il')} ${new Date(a.at).toLocaleDateString('it-IT')}</small>
         <small style="color:var(--green)">Entrate ${euro(a.ent||0)} · <span style="color:var(--red)">Uscite ${euro(a.usc||0)}</span></small>
       </span>
       <span class="rr" style="flex-wrap:wrap;gap:6px">
@@ -17772,6 +17807,1179 @@ Object.keys(TRAD19).forEach(l=>{
   Object.entries(TRAD19[l]).forEach(([k,v])=>{ if(d[k]===undefined) d[k]=v });
 });
 
+/* ══════════════════════════════════════════════════════════
+   TRAD20 · TUTTO QUELLO CHE MANCAVA
+   Scritte della Home, dei rapporti, delle ricevute, delle casse, dei beni,
+   dei messaggi e delle spiegazioni lunghe che nelle altre quattro lingue
+   restavano in italiano — trovate una per una passando il programma al
+   setaccio. Anche i nomi di partenza delle casse, dei depositi e delle
+   categorie dei beni: se lui ne rinomina una, resta come l'ha scritta lui.
+   Una voce che esiste già non viene toccata, tranne quelle in OVERRIDE20.
+   ══════════════════════════════════════════════════════════ */
+const TRAD20={
+ro:{
+'Saldo del Campo':'Soldul câmpului',
+'Banca + Contanti':'Bancă + Numerar',
+'Banca':'Bancă',
+'Contanti':'Numerar',
+'🏠 Home':'🏠 Acasă',
+'❓ Guida':'❓ Ghid',
+'🏛️ Registro beni':'🏛️ Inventar',
+'Backup':'Copie',
+'Condividi':'Partajează',
+'Fornitore':'Furnizor',
+'Media':'Medie',
+'Ultima':'Ultima',
+'Da oggi':'De azi',
+'Ricevuta':'Chitanță',
+'Dettaglio':'Detaliu',
+'Importante:':'Important:',
+'Offerta Missionaria':'Dar misionar',
+'Letteratura':'Literatură',
+'Scuola del Sabato':'Școala de Sabat',
+'Assistenza Sociale':'Asistență socială',
+'Altre Offerte':'Alte daruri',
+'1° Sabato':'Primul Sabat',
+'Missione Straniera':'Misiune externă',
+'Settimana di Preghiera':'Săptămâna de rugăciune',
+'Utenze':'Utilități',
+'Viaggi':'Călătorii',
+'Varie':'Diverse',
+'Arredi':'Mobilier',
+'Attrezzatura':'Echipament',
+'Attrezzature':'Echipamente',
+'Impianti':'Instalații',
+'Informatica':'Informatică',
+'Libri e letteratura':'Cărți și literatură',
+'Strumenti':'Instrumente',
+'— senza categoria —':'— fără categorie —',
+'➕ Nuova categoria…':'➕ Categorie nouă…',
+'Dollaro americano':'Dolar american',
+'Leu romeno':'Leu românesc',
+'Real brasiliano':'Real brazilian',
+'Sterlina inglese':'Liră sterlină',
+'Peso argentino':'Peso argentinian',
+'Dollaro canadese':'Dolar canadian',
+'gennaio':'ianuarie',
+'febbraio':'februarie',
+'marzo':'martie',
+'aprile':'aprilie',
+'maggio':'mai',
+'giugno':'iunie',
+'luglio':'iulie',
+'agosto':'august',
+'settembre':'septembrie',
+'ottobre':'octombrie',
+'novembre':'noiembrie',
+'dicembre':'decembrie',
+'Gennaio':'Ianuarie',
+'Febbraio':'Februarie',
+'Marzo':'Martie',
+'Aprile':'Aprilie',
+'Maggio':'Mai',
+'Giugno':'Iunie',
+'Luglio':'Iulie',
+'Agosto':'August',
+'Settembre':'Septembrie',
+'Ottobre':'Octombrie',
+'Novembre':'Noiembrie',
+'Dicembre':'Decembrie',
+'Usato in':'Folosit în',
+'di ricevuta':'de chitanță',
+'Non ancora usato':'Încă nefolosit',
+'blocco del rapporto all\'Unione':'bloc din raportul către Uniune',
+'all\'Unione':'către Uniune',
+'da versare':'de vărsat',
+'resta tutta al campo':'rămâne toată la câmp',
+'descrizioni nel rapporto':'descrieri în raport',
+'usata in':'folosit în',
+'non ancora usata':'încă nefolosită',
+'saldo':'sold',
+'rapporto inviato':'raport trimis',
+'rapporti inviati':'rapoarte trimise',
+'allegato':'atașament',
+'allegati':'atașamente',
+'archiviato il':'arhivat la',
+'Nessun telefono':'Niciun telefon',
+'Tutto lo storico':'Tot istoricul',
+'Dal':'De la',
+'al':'până la',
+'Copia rimessa':'Copie restabilită',
+'del rapporto':'din raportul',
+'Date scelte a mano':'Date alese de mână',
+'Quota Unione':'Cota Uniunii',
+'Totale versato':'Total vărsat',
+'Importo versato':'Sumă vărsată',
+'Versato':'Vărsat',
+'Data del versamento':'Data vărsământului',
+'Rapporto chiuso.':'Raport închis.',
+'Il rapporto di':'Raportul din',
+'non è ancora stato inviato all\'Unione':'nu a fost încă trimis Uniunii',
+'Modifica ricevuta':'Modifică chitanța',
+'Questa riga è già finita nel':'Acest rând a ajuns deja în',
+'rapporto all\'Unione':'raportul către Uniune',
+'di':'din',
+': non si tocca più.':': nu se mai modifică.',
+'Riga chiusa a chiave: è già finita nel rapporto all\'Unione':'Rând închis cu cheia: a ajuns deja în raportul către Uniune',
+'Prima va chiuso il rapporto di':'Mai întâi trebuie închis raportul din',
+'Il mese è finito e all\'Unione non è ancora partito niente: con questa data l\'entrata non si registra. Metti una data fino al':'Luna s-a încheiat și către Uniune nu a plecat încă nimic: cu această dată intrarea nu se înregistrează. Pune o dată până la',
+'— le entrate di':'— intrările din',
+'si possono ancora scrivere — oppure vai in':'se mai pot scrie — sau mergi la',
+'e invia il rapporto.':'și trimite raportul.',
+'Questo controllo si spegne in':'Această verificare se oprește din',
+'Con questa data le casse che versano all\'Unione sono chiuse.':'Cu această dată fondurile care varsă către Uniune sunt închise.',
+'è già partito e l\'Unione quei numeri li ha già messi nei suoi conti. Puoi lavorare liberamente sulle':'a plecat deja și Uniunea a trecut deja acele cifre în conturile ei. Poți lucra liber pe',
+'casse che restano al campo':'fondurile care rămân la câmp',
+'; sulle altre, se davvero devi correggere, prima annulla l\'invio di quel mese in':'; pe celelalte, dacă chiar trebuie să corectezi, anulează mai întâi trimiterea acelei luni din',
+'mesi precedenti mai chiusi':'luni anterioare niciodată închise',
+'Questo rapporto versa soltanto la quota di':'Acest raport varsă doar cota din',
+'scalati da':'scăzuți din',
+'scalato da':'scăzut din',
+'IL RAPPORTO DI':'RAPORTUL DIN',
+'È A ZERO':'ESTE ZERO',
+'Stai per inviare il rapporto di':'Ești pe cale să trimiți raportul din',
+'per':'pentru',
+'. Se hai trattenuto qualcosa, se un versamento è parziale o se c\'è qualcosa da spiegare, scrivilo adesso: la nota finisce sul rapporto in PDF che ricevono loro.':'. Dacă ai reținut ceva, dacă un vărsământ este parțial sau dacă e ceva de explicat, scrie-o acum: nota ajunge în raportul PDF pe care îl primesc ei.',
+'Al momento':'Deocamdată',
+'non c\'è nessuna nota':'nu există nicio notă',
+'. Se non serve, prosegui pure.':'. Dacă nu e nevoie, continuă.',
+'Scegli se aggiungere una nota':'Alege dacă adaugi o notă',
+'Confermi la banca da cui esce il denaro e la data':'Confirmi banca din care ies banii și data',
+'Il rapporto in PDF,':'Raportul în PDF,',
+'nella lingua del programma':'în limba programului',
+', viene creato e allegato':', este creat și atașat',
+'Il rapporto si chiude a chiave: non potrà più essere inviato':'Raportul se închide cu cheia: nu va mai putea fi trimis',
+'Dopo la conferma questo rapporto':'După confirmare acest raport',
+'non potrà più essere inviato':'nu va mai putea fi trimis',
+'⚠️ Nessuna nota · Procedi':'⚠️ Nicio notă · Continuă',
+'✍️ Vuoi scrivere una nota all\'Unione?':'✍️ Vrei să scrii o notă Uniunii?',
+'✍️ Nota mandata all\'Unione:':'✍️ Notă trimisă Uniunii:',
+'Stai per registrare il versamento all\'Unione di':'Ești pe cale să înregistrezi vărsământul către Uniune de',
+'Le quote qui sotto tornano a zero e l\'importo viene scalato dalla banca.':'Cotele de mai jos revin la zero și suma se scade din bancă.',
+'Stai per chiudere':'Ești pe cale să închizi',
+'con un rapporto':'cu un raport',
+'a zero':'la zero',
+'questo mese non c\'è niente da versare. Non viene scalato niente da nessun deposito, ma l\'Unione riceve il foglio del mese con tutte le casse.':'luna aceasta nu este nimic de vărsat. Nu se scade nimic din niciun depozit, dar Uniunea primește foaia lunii cu toate fondurile.',
+'Scala l\'importo dal deposito':'Scade suma din depozit',
+'Non scalare da nessun deposito':'Nu scădea din niciun depozit',
+'Documenti che verranno creati e inviati':'Documente care vor fi create și trimise',
+'Il foglio dell\'Unione, nella lingua del programma, con gli importi nella moneta scelta':'Foaia Uniunii, în limba programului, cu sumele în moneda aleasă',
+'Gli stessi numeri in Excel, con le righe per le firme':'Aceleași cifre în Excel, cu rânduri pentru semnături',
+'Mail già pronta per':'E-mail gata pentru',
+'l\'Unione':'Uniune',
+'Con l\'allegato dentro, oggetto e testo nella lingua del programma':'Cu atașamentul inclus, subiectul și textul în limba programului',
+'copia a':'copie la',
+'Rimandare all\'Unione il rapporto di':'Retrimiți Uniunii raportul din',
+'Somme trattenute, versamenti parziali, qualcosa da spiegare…':'Sume reținute, vărsăminte parțiale, ceva de explicat…',
+'Rapporto già inviato: la nota di questo mese è stata mandata ed è conservata qui sotto.':'Raport deja trimis: nota acestei luni a fost trimisă și este păstrată mai jos.',
+'Adesso è in sospeso il rapporto di':'Acum este în așteptare raportul din',
+'Adesso non c\'è nessun rapporto in sospeso.':'Acum nu există niciun raport în așteptare.',
+'su':'din',
+'Superato di':'Depășit cu',
+'all\'anno':'pe an',
+'circa':'circa',
+'al mese':'pe lună',
+'e':'și',
+'in tre anni':'în trei ani',
+'Nel periodo scelto il limite è in proporzione ai giorni: un trimestre vale un quarto dell\'anno. Si conta la':'În perioada aleasă limita este proporțională cu zilele: un trimestru valorează un sfert din an. Se socotește',
+'voce':'poziția',
+'«Varie» del rapporto — le spese piccole messe insieme in una riga sola — e non la':'«Diverse» din raport — cheltuielile mici puse împreună pe un singur rând — și nu',
+'cassa':'fond',
+'Varie: una spesa fatta da quella cassa, se ha la sua descrizione, sul rapporto ha la sua riga e qui non entra.':'Diverse: o cheltuială făcută din acel fond, dacă are descrierea ei, în raport are rândul ei și aici nu intră.',
+'Nuova ricevuta in entrata':'Chitanță nouă de intrare',
+'Nuova ricevuta in uscita':'Chitanță nouă de ieșire',
+'Elimina riga':'Șterge rândul',
+'— Deposito —':'— Depozit —',
+'Nome e cognome o ditta':'Nume și prenume sau firmă',
+'Indirizzo, riferimento…':'Adresă, referință…',
+'Note aggiuntive che compaiono sulla ricevuta':'Note suplimentare care apar pe chitanță',
+'Scrivi o scegli un nome e cognome per intero':'Scrie sau alege un nume complet',
+'Nessun numero di telefono registrato':'Niciun număr de telefon înregistrat',
+'Cambiando il nome verranno aggiornate anche tutte le ricevute già registrate a questo nominativo.':'Schimbând numele se vor actualiza și toate chitanțele deja înregistrate pe acest nume.',
+'Ripartizione per cassa':'Repartizare pe fonduri',
+'Elenco dei nomi':'Lista numelor',
+'📄 Elenco in PDF':'📄 Listă în PDF',
+'Salva come CSV':'Salvează ca CSV',
+'📷 Nessuna foto.':'📷 Nicio fotografie.',
+'Scatta o scegli una foto qui sotto: comparirà grande in cima alla scheda.':'Fă sau alege o fotografie mai jos: va apărea mare în capul fișei.',
+'Le foto vengono rimpicciolite da sole a 1200 pixel: restano nitide ma occupano poco spazio.':'Fotografiile se micșorează singure la 1200 de pixeli: rămân clare, dar ocupă puțin spațiu.',
+'Scrivi quantità e prezzo unitario e il totale lo fa il programma. Se preferisci puoi anche scrivere il totale a mano.':'Scrie cantitatea și prețul unitar, iar totalul îl face programul. Dacă preferi, poți scrie și totalul de mână.',
+'Data della rottamazione':'Data casării',
+'Importa i beni':'Importă bunurile',
+'Importa i movimenti':'Importă mișcările',
+'Inserisci i beni':'Adaugă bunurile',
+'Da un altro programma, senza riscrivere niente':'Dintr-un alt program, fără să rescrii nimic',
+'Da un PDF o da un elenco scritto: non li riscrivi a mano':'Dintr-un PDF sau dintr-o listă scrisă: nu le rescrii de mână',
+'Oppure incolla qui l\'elenco':'Sau lipește aici lista',
+'Oppure incolla qui le righe':'Sau lipește aici rândurile',
+'📄 Scegli il file esportato':'📄 Alege fișierul exportat',
+'📄 Scegli un PDF o un testo':'📄 Alege un PDF sau un text',
+'🔍 Leggi il testo qui sotto':'🔍 Citește textul de mai jos',
+'🔍 Rileggi':'🔍 Recitește',
+'Salva la ricevuta in PDF, nel foglio giusto':'Salvează chitanța în PDF, pe foaia potrivită',
+'Firma con il dito o con la matita, come su un foglio':'Semnează cu degetul sau cu creionul, ca pe o foaie',
+'Nessuna firma registrata: sulla ricevuta resta solo la riga con il nome del tesoriere. Tocca':'Nicio semnătură înregistrată: pe chitanță rămâne doar rândul cu numele trezorierului. Apasă',
+'— su iPad e iPhone si firma direttamente sullo schermo.':'— pe iPad și iPhone se semnează direct pe ecran.',
+'Firma dentro il riquadro. Se non ti piace tocca':'Semnează în chenar. Dacă nu-ți place, apasă',
+'e rifalla. La firma resta registrata e da quel momento compare su tutte le ricevute.':'și refă-o. Semnătura rămâne înregistrată și din acel moment apare pe toate chitanțele.',
+'La contabilità del campo è su questo dispositivo. Il codice serve a non farla aprire a chi non deve.':'Contabilitatea câmpului este pe acest dispozitiv. Codul servește ca să nu o deschidă cine nu trebuie.',
+'⌘ Maiusc R':'⌘ Shift R',
+'Cerca dappertutto':'Caută peste tot',
+'Ricevute, persone, casse, depositi, beni e guida — tutto insieme':'Chitanțe, persoane, fonduri, depozite, bunuri și ghid — totul la un loc',
+'Nome, numero di ricevuta, importo, parola nella descrizione…':'Nume, număr de chitanță, sumă, cuvânt din descriere…',
+'Scrivi per esempio: fare una ricevuta, backup, rapporto all\'Unione, importare un rapporto…':'Scrie de exemplu: a face o chitanță, copie, raport către Uniune, a importa un raport…',
+'Scrivi quello che ti ricordi: il':'Scrie ce îți amintești:',
+'nome':'numele',
+'di chi ha versato, il':'celui care a vărsat,',
+'numero':'numărul',
+'della ricevuta, un':'chitanței, o',
+'importo':'sumă',
+'(anche solo «120»), una':'(chiar și doar «120»), un',
+'parola':'cuvânt',
+'della descrizione, il nome di una':'din descriere, numele unui',
+'o di un':'sau al unui',
+'bene':'bun',
+'. Cerco dappertutto insieme.':'. Caut peste tot deodată.',
+'Della foto resta':'Din fotografie rămâne',
+'solo il foglio':'doar foaia',
+': il programma lo raddrizza, gli riporta la carta al bianco e lo mette in PDF. Più pagine finiscono in':': programul o îndreaptă, readuce hârtia la alb și o pune în PDF. Mai multe pagini ajung în',
+'un PDF solo':'un singur PDF',
+'. Viene un allegato pulito da leggere e molto più leggero della fotografia.':'. Iese un atașament curat de citit și mult mai ușor decât fotografia.',
+'Nel foglio finiscono nome, telefono,':'În foaie ajung numele, telefonul,',
+', quante ricevute ha e il totale. Ogni categoria ha il suo titolo e i nominativi sono in ordine alfabetico. Le categorie che non spunti non compaiono per niente.':', câte chitanțe are și totalul. Fiecare categorie are titlul ei, iar numele sunt în ordine alfabetică. Categoriile pe care nu le bifezi nu apar deloc.',
+'La spunta':'Bifa',
+'o':'sau',
+'serve a tenere in ordine la rubrica.':'ajută la ținerea în ordine a agendei.',
+'è la data da cui comincia a dover il contributo: chi entra a giugno deve giugno, non gennaio. Se la lasci vuota vale tutto l\'anno.':'este data de la care începe să datoreze contribuția: cine intră în iunie datorează iunie, nu ianuarie. Dacă o lași goală, e valabil tot anul.',
+'Prendi l\'elenco che hai già — un PDF, un foglio Excel salvato in testo, o anche solo delle righe scritte — e il programma le legge una per una.':'Ia lista pe care o ai deja — un PDF, o foaie Excel salvată ca text sau chiar doar niște rânduri scrise — iar programul le citește una câte una.',
+'Prima di inserire niente ti fa vedere che cosa ha capito':'Înainte să adauge ceva îți arată ce a înțeles',
+', riga per riga: quello che non va lo togli con la spunta e lo scrivi a mano dopo.':', rând cu rând: ce nu merge scoți cu bifa și scrii de mână după aceea.',
+'Come si fa.':'Cum se face.',
+'Dal programma che usi adesso esporta i movimenti in':'Din programul pe care îl folosești acum exportă mișcările în',
+'(in FileMaker:':'(în FileMaker:',
+'File → Esporta record → CSV':'File → Export Records → CSV',
+'; in Excel o Numbers:':'; în Excel sau Numbers:',
+'). Poi apri quel file qui sotto, oppure incolla direttamente le righe. Va bene anche una tabella markdown.':'). Apoi deschide acel fișier aici dedesubt sau lipește direct rândurile. Merge și un tabel markdown.',
+'Prima di scrivere qualsiasi cosa':'Înainte să scriu ceva',
+'ti faccio vedere che cosa ho capito, colonna per colonna, con i totali.':'îți arăt ce am înțeles, coloană cu coloană, cu totalurile.',
+'Una riga per ogni bene, per esempio: 200 sedie da sala 40,00 € Pianoforte verticale; Arredi; 12/05/2018; 1; 2.500,00 | Descrizione | Categoria | Data | Q.tà | Prezzo | Va bene anche una tabella markdown, con le barrette.':'Un rând pentru fiecare bun, de exemplu:\n200 scaune de sală 40,00 €\nPian vertical; Mobilier; 12/05/2018; 1; 2.500,00\n| Descriere | Categorie | Data | Cant. | Preț |\nMerge și un tabel markdown, cu bare.',
+'La moneta scelta viene scritta':'Moneda aleasă se scrie',
+'dappertutto':'peste tot',
+': ricevute, rapporti, diapositive, Excel e schermate.':': chitanțe, rapoarte, diapozitive, Excel și ecrane.',
+'Gli importi non si convertono':'Sumele nu se convertesc',
+'— un 100 registrato resta 100, cambia solo la moneta con cui è scritto. I numeri si continuano a scrivere all\'italiana (':'— un 100 înregistrat rămâne 100, se schimbă doar moneda cu care e scris. Numerele se scriu în continuare în stil italian (',
+') in tutte le monete.':') în toate monedele.',
+'Tutto il programma è tradotto':'Tot programul este tradus',
+': menu, pulsanti, messaggi, rapporti, ricevute e guida. Le immagini della guida mostrano il programma in italiano.':': meniuri, butoane, mesaje, rapoarte, chitanțe și ghid. Imaginile din ghid arată programul în italiană.',
+'Movimento di Riforma':'Mișcării de Reformă',
+'Stato adesso:':'Stare acum:',
+'collegato':'conectat',
+'senza rete':'fără rețea',
+'aperto dal file':'deschis din fișier',
+'aperto da un indirizzo web':'deschis de la o adresă web',
+'guardiano attivo':'paznic activ',
+'nessun guardiano':'niciun paznic',
+'aperto dall\'icona':'deschis din pictogramă',
+'liberi su':'libere din',
+'non dichiarato dal browser':'nedeclarat de browser',
+'Lo spazio del dispositivo sta finendo':'Spațiul dispozitivului se termină',
+'⚠️ Senza internet questa icona non si apre.':'⚠️ Fără internet această pictogramă nu se deschide.',
+'Accanto al programma manca':'Lângă program lipsește',
+'📶 Come si aggiusta':'📶 Cum se repară',
+'Il programma lavora e salva benissimo anche offline — i dati sono qui dentro — ma':'Programul lucrează și salvează foarte bine și offline — datele sunt aici înăuntru — dar',
+'parte da un indirizzo web':'pornește de la o adresă web',
+', e per aprirlo senza rete accanto al programma deve esserci un file che si chiama':', iar ca să-l deschizi fără rețea lângă program trebuie să fie un fișier numit',
+'. Adesso non c\'è.':'. Acum nu există.',
+'✅ sw.js c\'è, a quell\'indirizzo.':'✅ sw.js există, la acea adresă.',
+'Se il guardiano non risulta ancora attivo, chiudi e riapri il programma una volta con la rete accesa.':'Dacă paznicul nu apare încă activ, închide și redeschide programul o dată cu rețeaua pornită.',
+'Il programma in sé non scarica niente da internet — logo, icone, guida e figure stanno tutti dentro questo file — ma':'Programul în sine nu descarcă nimic de pe internet — sigla, pictogramele, ghidul și figurile sunt toate în acest fișier — dar',
+', e quell\'indirizzo senza rete non risponde. È per questo che uscendo e rientrando dall\'icona ti chiede di collegarti.':', iar acea adresă fără rețea nu răspunde. De aceea, când ieși și reintri din pictogramă, îți cere să te conectezi.',
+'Il programma adesso lo apri da qui:':'Acum deschizi programul de aici:',
+'e sw.js deve finire esattamente qui:':'iar sw.js trebuie să ajungă exact aici:',
+'Aggiungi alla schermata Home':'Adaugă pe ecranul principal',
+': il sistema potrebbe cancellare i dati di questo programma se il dispositivo va a corto di spazio, e finché non è protetto tiene anche l\'archivio più stretto. Su iPad e iPhone la protezione arriva quando aggiungi il programma alla':': sistemul ar putea șterge datele acestui program dacă dispozitivul rămâne fără spațiu, iar cât timp nu este protejat ține și arhiva mai strâmtă. Pe iPad și iPhone protecția vine când adaugi programul pe',
+'spostarlo':'a-l muta',
+'peso':'greutatea',
+'). In fondo':'). La sfârșit'
+},
+en:{
+'Saldo del Campo':'Field balance',
+'Banca + Contanti':'Bank + Cash',
+'Banca':'Bank',
+'Contanti':'Cash',
+'🏠 Home':'🏠 Home',
+'❓ Guida':'❓ Guide',
+'🏛️ Registro beni':'🏛️ Assets',
+'Backup':'Backup',
+'Condividi':'Share',
+'Fornitore':'Supplier',
+'Media':'Average',
+'Ultima':'Latest',
+'Da oggi':'From today',
+'Ricevuta':'Receipt',
+'Dettaglio':'Detail',
+'Importante:':'Important:',
+'Offerta Missionaria':'Missions',
+'Letteratura':'Literature',
+'Scuola del Sabato':'Sabbath School',
+'Assistenza Sociale':'Poor',
+'Altre Offerte':'Other Offerings',
+'1° Sabato':'First Sabbath',
+'Missione Straniera':'Foreign Mission',
+'Settimana di Preghiera':'Week of Prayer',
+'Utenze':'Utilities',
+'Viaggi':'Travel',
+'Varie':'Miscellaneous',
+'Arredi':'Furniture',
+'Attrezzatura':'Equipment',
+'Attrezzature':'Equipment',
+'Impianti':'Installations',
+'Informatica':'IT equipment',
+'Libri e letteratura':'Books and literature',
+'Strumenti':'Instruments',
+'— senza categoria —':'— no category —',
+'➕ Nuova categoria…':'➕ New category…',
+'Dollaro americano':'US dollar',
+'Leu romeno':'Romanian leu',
+'Real brasiliano':'Brazilian real',
+'Sterlina inglese':'Pound sterling',
+'Peso argentino':'Argentine peso',
+'Dollaro canadese':'Canadian dollar',
+'gennaio':'January',
+'febbraio':'February',
+'marzo':'March',
+'aprile':'April',
+'maggio':'May',
+'giugno':'June',
+'luglio':'July',
+'agosto':'August',
+'settembre':'September',
+'ottobre':'October',
+'novembre':'November',
+'dicembre':'December',
+'Gennaio':'January',
+'Febbraio':'February',
+'Marzo':'March',
+'Aprile':'April',
+'Maggio':'May',
+'Giugno':'June',
+'Luglio':'July',
+'Agosto':'August',
+'Settembre':'September',
+'Ottobre':'October',
+'Novembre':'November',
+'Dicembre':'December',
+'Usato in':'Used in',
+'di ricevuta':'on receipts',
+'Non ancora usato':'Not used yet',
+'blocco del rapporto all\'Unione':'block of the Union report',
+'all\'Unione':'to the Union',
+'da versare':'to pay in',
+'resta tutta al campo':'stays entirely with the field',
+'descrizioni nel rapporto':'descriptions in the report',
+'usata in':'used in',
+'non ancora usata':'not used yet',
+'saldo':'balance',
+'rapporto inviato':'report sent',
+'rapporti inviati':'reports sent',
+'allegato':'attachment',
+'allegati':'attachments',
+'archiviato il':'archived on',
+'Nessun telefono':'No phone',
+'Tutto lo storico':'Whole history',
+'Dal':'From',
+'al':'to',
+'Copia rimessa':'Copy restored',
+'del rapporto':'from the report',
+'Date scelte a mano':'Dates chosen by hand',
+'Quota Unione':'Union share',
+'Totale versato':'Total paid in',
+'Importo versato':'Amount paid in',
+'Versato':'Paid in',
+'Data del versamento':'Payment date',
+'Rapporto chiuso.':'Report closed.',
+'Il rapporto di':'The report for',
+'non è ancora stato inviato all\'Unione':'has not been sent to the Union yet',
+'Modifica ricevuta':'Edit receipt',
+'Questa riga è già finita nel':'This line is already in the',
+'rapporto all\'Unione':'report to the Union',
+'di':'for',
+': non si tocca più.':': it can no longer be changed.',
+'Riga chiusa a chiave: è già finita nel rapporto all\'Unione':'Line locked: it is already in the report to the Union',
+'Prima va chiuso il rapporto di':'First you must close the report for',
+'Il mese è finito e all\'Unione non è ancora partito niente: con questa data l\'entrata non si registra. Metti una data fino al':'The month is over and nothing has gone to the Union yet: with this date the income cannot be recorded. Use a date up to',
+'— le entrate di':'— income for',
+'si possono ancora scrivere — oppure vai in':'can still be written — or go to',
+'e invia il rapporto.':'and send the report.',
+'Questo controllo si spegne in':'This check can be turned off in',
+'Con questa data le casse che versano all\'Unione sono chiuse.':'With this date the funds that pay into the Union are closed.',
+'è già partito e l\'Unione quei numeri li ha già messi nei suoi conti. Puoi lavorare liberamente sulle':'has already gone and the Union has already put those figures in its books. You can work freely on the',
+'casse che restano al campo':'funds that stay with the field',
+'; sulle altre, se davvero devi correggere, prima annulla l\'invio di quel mese in':'; for the others, if you really must correct something, first undo that month\'s sending in',
+'mesi precedenti mai chiusi':'earlier months never closed',
+'Questo rapporto versa soltanto la quota di':'This report only pays in the share for',
+'scalati da':'taken from',
+'scalato da':'taken from',
+'IL RAPPORTO DI':'THE REPORT FOR',
+'È A ZERO':'IS ZERO',
+'Stai per inviare il rapporto di':'You are about to send the report for',
+'per':'for',
+'. Se hai trattenuto qualcosa, se un versamento è parziale o se c\'è qualcosa da spiegare, scrivilo adesso: la nota finisce sul rapporto in PDF che ricevono loro.':'. If you have withheld something, if a payment is partial or if there is something to explain, write it now: the note goes onto the PDF report they receive.',
+'Al momento':'At the moment',
+'non c\'è nessuna nota':'there is no note',
+'. Se non serve, prosegui pure.':'. If it is not needed, just go ahead.',
+'Scegli se aggiungere una nota':'Choose whether to add a note',
+'Confermi la banca da cui esce il denaro e la data':'You confirm the bank the money leaves from and the date',
+'Il rapporto in PDF,':'The PDF report,',
+'nella lingua del programma':'in the program\'s language',
+', viene creato e allegato':', is created and attached',
+'Il rapporto si chiude a chiave: non potrà più essere inviato':'The report is locked: it can no longer be sent',
+'Dopo la conferma questo rapporto':'After confirmation this report',
+'non potrà più essere inviato':'can no longer be sent',
+'⚠️ Nessuna nota · Procedi':'⚠️ No note · Continue',
+'✍️ Vuoi scrivere una nota all\'Unione?':'✍️ Do you want to write a note to the Union?',
+'✍️ Nota mandata all\'Unione:':'✍️ Note sent to the Union:',
+'Stai per registrare il versamento all\'Unione di':'You are about to record the payment to the Union of',
+'Le quote qui sotto tornano a zero e l\'importo viene scalato dalla banca.':'The shares below go back to zero and the amount is taken from the bank.',
+'Stai per chiudere':'You are about to close',
+'con un rapporto':'with a report',
+'a zero':'at zero',
+'questo mese non c\'è niente da versare. Non viene scalato niente da nessun deposito, ma l\'Unione riceve il foglio del mese con tutte le casse.':'there is nothing to pay in this month. Nothing is taken from any account, but the Union receives the month\'s sheet with all the funds.',
+'Scala l\'importo dal deposito':'Take the amount from the account',
+'Non scalare da nessun deposito':'Do not take from any account',
+'Documenti che verranno creati e inviati':'Documents that will be created and sent',
+'Il foglio dell\'Unione, nella lingua del programma, con gli importi nella moneta scelta':'The Union sheet, in the program\'s language, with amounts in the chosen currency',
+'Gli stessi numeri in Excel, con le righe per le firme':'The same figures in Excel, with lines for signatures',
+'Mail già pronta per':'E-mail ready for',
+'l\'Unione':'the Union',
+'Con l\'allegato dentro, oggetto e testo nella lingua del programma':'With the attachment inside, subject and text in the program\'s language',
+'copia a':'copy to',
+'Rimandare all\'Unione il rapporto di':'Resend to the Union the report for',
+'Somme trattenute, versamenti parziali, qualcosa da spiegare…':'Amounts withheld, partial payments, anything to explain…',
+'Rapporto già inviato: la nota di questo mese è stata mandata ed è conservata qui sotto.':'Report already sent: this month\'s note was sent and is kept below.',
+'Adesso è in sospeso il rapporto di':'Pending now: the report for',
+'Adesso non c\'è nessun rapporto in sospeso.':'There is no pending report right now.',
+'su':'of',
+'Superato di':'Exceeded by',
+'all\'anno':'a year',
+'circa':'about',
+'al mese':'a month',
+'e':'and',
+'in tre anni':'in three years',
+'Nel periodo scelto il limite è in proporzione ai giorni: un trimestre vale un quarto dell\'anno. Si conta la':'In the chosen period the limit is in proportion to the days: a quarter is worth a quarter of the year. What counts is the',
+'voce':'line',
+'«Varie» del rapporto — le spese piccole messe insieme in una riga sola — e non la':'«Miscellaneous» on the report — the small expenses put together on one line — and not the',
+'cassa':'fund',
+'Varie: una spesa fatta da quella cassa, se ha la sua descrizione, sul rapporto ha la sua riga e qui non entra.':'Miscellaneous: an expense paid from that fund, if it has its own description, has its own line on the report and does not count here.',
+'Nuova ricevuta in entrata':'New income receipt',
+'Nuova ricevuta in uscita':'New expense receipt',
+'Elimina riga':'Delete line',
+'— Deposito —':'— Account —',
+'Nome e cognome o ditta':'Full name or company',
+'Indirizzo, riferimento…':'Address, reference…',
+'Note aggiuntive che compaiono sulla ricevuta':'Extra notes that appear on the receipt',
+'Scrivi o scegli un nome e cognome per intero':'Type or pick a full name',
+'Nessun numero di telefono registrato':'No phone number recorded',
+'Cambiando il nome verranno aggiornate anche tutte le ricevute già registrate a questo nominativo.':'Changing the name will also update every receipt already recorded under this name.',
+'Ripartizione per cassa':'Breakdown by fund',
+'Elenco dei nomi':'List of names',
+'📄 Elenco in PDF':'📄 List as PDF',
+'Salva come CSV':'Save as CSV',
+'📷 Nessuna foto.':'📷 No photo.',
+'Scatta o scegli una foto qui sotto: comparirà grande in cima alla scheda.':'Take or choose a photo below: it will appear large at the top of the card.',
+'Le foto vengono rimpicciolite da sole a 1200 pixel: restano nitide ma occupano poco spazio.':'Photos are shrunk automatically to 1200 pixels: they stay sharp but take little space.',
+'Scrivi quantità e prezzo unitario e il totale lo fa il programma. Se preferisci puoi anche scrivere il totale a mano.':'Enter quantity and unit price and the program works out the total. If you prefer, you can also type the total by hand.',
+'Data della rottamazione':'Disposal date',
+'Importa i beni':'Import assets',
+'Importa i movimenti':'Import transactions',
+'Inserisci i beni':'Add the assets',
+'Da un altro programma, senza riscrivere niente':'From another program, without retyping anything',
+'Da un PDF o da un elenco scritto: non li riscrivi a mano':'From a PDF or a written list: you do not retype them by hand',
+'Oppure incolla qui l\'elenco':'Or paste the list here',
+'Oppure incolla qui le righe':'Or paste the lines here',
+'📄 Scegli il file esportato':'📄 Choose the exported file',
+'📄 Scegli un PDF o un testo':'📄 Choose a PDF or a text',
+'🔍 Leggi il testo qui sotto':'🔍 Read the text below',
+'🔍 Rileggi':'🔍 Read again',
+'Salva la ricevuta in PDF, nel foglio giusto':'Save the receipt as a PDF, on the right sheet',
+'Firma con il dito o con la matita, come su un foglio':'Sign with your finger or the pencil, as on paper',
+'Nessuna firma registrata: sulla ricevuta resta solo la riga con il nome del tesoriere. Tocca':'No signature recorded: the receipt only shows the line with the treasurer\'s name. Tap',
+'— su iPad e iPhone si firma direttamente sullo schermo.':'— on iPad and iPhone you sign straight on the screen.',
+'Firma dentro il riquadro. Se non ti piace tocca':'Sign inside the box. If you do not like it, tap',
+'e rifalla. La firma resta registrata e da quel momento compare su tutte le ricevute.':'and do it again. The signature stays recorded and from then on appears on every receipt.',
+'La contabilità del campo è su questo dispositivo. Il codice serve a non farla aprire a chi non deve.':'The field\'s accounts are on this device. The code keeps them from being opened by anyone who should not.',
+'⌘ Maiusc R':'⌘ Shift R',
+'Cerca dappertutto':'Search everywhere',
+'Ricevute, persone, casse, depositi, beni e guida — tutto insieme':'Receipts, people, funds, accounts, assets and guide — all together',
+'Nome, numero di ricevuta, importo, parola nella descrizione…':'Name, receipt number, amount, word in the description…',
+'Scrivi per esempio: fare una ricevuta, backup, rapporto all\'Unione, importare un rapporto…':'Type for example: make a receipt, backup, Union report, import a report…',
+'Scrivi quello che ti ricordi: il':'Type whatever you remember: the',
+'nome':'name',
+'di chi ha versato, il':'of who paid, the',
+'numero':'number',
+'della ricevuta, un':'of the receipt, an',
+'importo':'amount',
+'(anche solo «120»), una':'(even just «120»), a',
+'parola':'word',
+'della descrizione, il nome di una':'from the description, the name of a',
+'o di un':'or an',
+'bene':'asset',
+'. Cerco dappertutto insieme.':'. I search everywhere at once.',
+'Della foto resta':'What is left of the photo is',
+'solo il foglio':'just the sheet',
+': il programma lo raddrizza, gli riporta la carta al bianco e lo mette in PDF. Più pagine finiscono in':': the program straightens it, brings the paper back to white and puts it in a PDF. Several pages end up in',
+'un PDF solo':'a single PDF',
+'. Viene un allegato pulito da leggere e molto più leggero della fotografia.':'. You get an attachment that is clean to read and much lighter than the photo.',
+'Nel foglio finiscono nome, telefono,':'The sheet shows name, phone,',
+', quante ricevute ha e il totale. Ogni categoria ha il suo titolo e i nominativi sono in ordine alfabetico. Le categorie che non spunti non compaiono per niente.':', how many receipts and the total. Each category has its own heading and the names are in alphabetical order. Categories you do not tick do not appear at all.',
+'La spunta':'The',
+'o':'or',
+'serve a tenere in ordine la rubrica.':'tick keeps the address book in order.',
+'è la data da cui comincia a dover il contributo: chi entra a giugno deve giugno, non gennaio. Se la lasci vuota vale tutto l\'anno.':'is the date from which the contribution is due: whoever joins in June owes June, not January. If you leave it empty the whole year counts.',
+'Prendi l\'elenco che hai già — un PDF, un foglio Excel salvato in testo, o anche solo delle righe scritte — e il programma le legge una per una.':'Take the list you already have — a PDF, an Excel sheet saved as text, or even just a few written lines — and the program reads them one by one.',
+'Prima di inserire niente ti fa vedere che cosa ha capito':'Before adding anything it shows you what it understood',
+', riga per riga: quello che non va lo togli con la spunta e lo scrivi a mano dopo.':', line by line: whatever is wrong you untick and write by hand afterwards.',
+'Come si fa.':'How to do it.',
+'Dal programma che usi adesso esporta i movimenti in':'From the program you use now, export the transactions to',
+'(in FileMaker:':'(in FileMaker:',
+'File → Esporta record → CSV':'File → Export Records → CSV',
+'; in Excel o Numbers:':'; in Excel or Numbers:',
+'). Poi apri quel file qui sotto, oppure incolla direttamente le righe. Va bene anche una tabella markdown.':'). Then open that file below, or paste the lines straight in. A markdown table works too.',
+'Prima di scrivere qualsiasi cosa':'Before writing anything',
+'ti faccio vedere che cosa ho capito, colonna per colonna, con i totali.':'I show you what I understood, column by column, with the totals.',
+'Una riga per ogni bene, per esempio: 200 sedie da sala 40,00 € Pianoforte verticale; Arredi; 12/05/2018; 1; 2.500,00 | Descrizione | Categoria | Data | Q.tà | Prezzo | Va bene anche una tabella markdown, con le barrette.':'One line per asset, for example:\n200 hall chairs 40,00 €\nUpright piano; Furniture; 12/05/2018; 1; 2.500,00\n| Description | Category | Date | Qty | Price |\nA markdown table with bars works too.',
+'La moneta scelta viene scritta':'The chosen currency is written',
+'dappertutto':'everywhere',
+': ricevute, rapporti, diapositive, Excel e schermate.':': receipts, reports, slides, Excel and screens.',
+'Gli importi non si convertono':'Amounts are not converted',
+'— un 100 registrato resta 100, cambia solo la moneta con cui è scritto. I numeri si continuano a scrivere all\'italiana (':'— a 100 recorded stays 100, only the currency it is written in changes. Numbers keep the Italian way of writing (',
+') in tutte le monete.':') in every currency.',
+'Tutto il programma è tradotto':'The whole program is translated',
+': menu, pulsanti, messaggi, rapporti, ricevute e guida. Le immagini della guida mostrano il programma in italiano.':': menus, buttons, messages, reports, receipts and guide. The guide\'s pictures show the program in Italian.',
+'Movimento di Riforma':'Reform Movement',
+'Stato adesso:':'Status now:',
+'collegato':'online',
+'senza rete':'offline',
+'aperto dal file':'opened from the file',
+'aperto da un indirizzo web':'opened from a web address',
+'guardiano attivo':'guardian active',
+'nessun guardiano':'no guardian',
+'aperto dall\'icona':'opened from the icon',
+'liberi su':'free of',
+'non dichiarato dal browser':'not reported by the browser',
+'Lo spazio del dispositivo sta finendo':'The device is running out of space',
+'⚠️ Senza internet questa icona non si apre.':'⚠️ Without internet this icon does not open.',
+'Accanto al programma manca':'Next to the program there is no',
+'📶 Come si aggiusta':'📶 How to fix it',
+'Il programma lavora e salva benissimo anche offline — i dati sono qui dentro — ma':'The program works and saves perfectly well offline too — the data is in here — but it',
+'parte da un indirizzo web':'starts from a web address',
+', e per aprirlo senza rete accanto al programma deve esserci un file che si chiama':', and to open it offline there must be a file next to the program called',
+'. Adesso non c\'è.':'. Right now it is not there.',
+'✅ sw.js c\'è, a quell\'indirizzo.':'✅ sw.js is there, at that address.',
+'Se il guardiano non risulta ancora attivo, chiudi e riapri il programma una volta con la rete accesa.':'If the guardian does not show as active yet, close and reopen the program once with the network on.',
+'Il programma in sé non scarica niente da internet — logo, icone, guida e figure stanno tutti dentro questo file — ma':'The program itself downloads nothing from the internet — logo, icons, guide and pictures are all inside this file — but it',
+', e quell\'indirizzo senza rete non risponde. È per questo che uscendo e rientrando dall\'icona ti chiede di collegarti.':', and without a network that address does not answer. That is why, when you leave and come back through the icon, it asks you to connect.',
+'Il programma adesso lo apri da qui:':'Right now you open the program from here:',
+'e sw.js deve finire esattamente qui:':'and sw.js must end up exactly here:',
+'Aggiungi alla schermata Home':'Add to Home Screen',
+': il sistema potrebbe cancellare i dati di questo programma se il dispositivo va a corto di spazio, e finché non è protetto tiene anche l\'archivio più stretto. Su iPad e iPhone la protezione arriva quando aggiungi il programma alla':': the system could delete this program\'s data if the device runs short of space, and until it is protected it also keeps the archive tighter. On iPad and iPhone protection comes when you add the program to the',
+'spostarlo':'moving it',
+'peso':'weight',
+'). In fondo':'). At the end'
+},
+es:{
+'Saldo del Campo':'Saldo del campo',
+'Banca + Contanti':'Banco + Efectivo',
+'Banca':'Banco',
+'Contanti':'Efectivo',
+'🏠 Home':'🏠 Inicio',
+'❓ Guida':'❓ Guía',
+'🏛️ Registro beni':'🏛️ Bienes',
+'Backup':'Copia',
+'Condividi':'Compartir',
+'Fornitore':'Proveedor',
+'Media':'Media',
+'Ultima':'Última',
+'Da oggi':'Desde hoy',
+'Ricevuta':'Recibo',
+'Dettaglio':'Detalle',
+'Importante:':'Importante:',
+'Offerta Missionaria':'Ofrenda misionera',
+'Letteratura':'Literatura',
+'Scuola del Sabato':'Escuela Sabática',
+'Assistenza Sociale':'Asistencia social',
+'Altre Offerte':'Otras ofrendas',
+'1° Sabato':'Primer sábado',
+'Missione Straniera':'Misión extranjera',
+'Settimana di Preghiera':'Semana de Oración',
+'Utenze':'Suministros',
+'Viaggi':'Viajes',
+'Varie':'Varios',
+'Arredi':'Mobiliario',
+'Attrezzatura':'Equipamiento',
+'Attrezzature':'Equipos',
+'Impianti':'Instalaciones',
+'Informatica':'Informática',
+'Libri e letteratura':'Libros y literatura',
+'Strumenti':'Instrumentos',
+'— senza categoria —':'— sin categoría —',
+'➕ Nuova categoria…':'➕ Nueva categoría…',
+'Dollaro americano':'Dólar estadounidense',
+'Leu romeno':'Leu rumano',
+'Real brasiliano':'Real brasileño',
+'Sterlina inglese':'Libra esterlina',
+'Peso argentino':'Peso argentino',
+'Dollaro canadese':'Dólar canadiense',
+'gennaio':'enero',
+'febbraio':'febrero',
+'marzo':'marzo',
+'aprile':'abril',
+'maggio':'mayo',
+'giugno':'junio',
+'luglio':'julio',
+'agosto':'agosto',
+'settembre':'septiembre',
+'ottobre':'octubre',
+'novembre':'noviembre',
+'dicembre':'diciembre',
+'Gennaio':'Enero',
+'Febbraio':'Febrero',
+'Marzo':'Marzo',
+'Aprile':'Abril',
+'Maggio':'Mayo',
+'Giugno':'Junio',
+'Luglio':'Julio',
+'Agosto':'Agosto',
+'Settembre':'Septiembre',
+'Ottobre':'Octubre',
+'Novembre':'Noviembre',
+'Dicembre':'Diciembre',
+'Usato in':'Usado en',
+'di ricevuta':'de recibo',
+'Non ancora usato':'Aún sin usar',
+'blocco del rapporto all\'Unione':'bloque del informe a la Unión',
+'all\'Unione':'a la Unión',
+'da versare':'a entregar',
+'resta tutta al campo':'queda entera en el campo',
+'descrizioni nel rapporto':'descripciones en el informe',
+'usata in':'usada en',
+'non ancora usata':'aún sin usar',
+'saldo':'saldo',
+'rapporto inviato':'informe enviado',
+'rapporti inviati':'informes enviados',
+'allegato':'adjunto',
+'allegati':'adjuntos',
+'archiviato il':'archivado el',
+'Nessun telefono':'Sin teléfono',
+'Tutto lo storico':'Todo el historial',
+'Dal':'Del',
+'al':'al',
+'Copia rimessa':'Copia restaurada',
+'del rapporto':'del informe',
+'Date scelte a mano':'Fechas elegidas a mano',
+'Quota Unione':'Cuota de la Unión',
+'Totale versato':'Total entregado',
+'Importo versato':'Importe entregado',
+'Versato':'Entregado',
+'Data del versamento':'Fecha de la entrega',
+'Rapporto chiuso.':'Informe cerrado.',
+'Il rapporto di':'El informe de',
+'non è ancora stato inviato all\'Unione':'todavía no se ha enviado a la Unión',
+'Modifica ricevuta':'Editar recibo',
+'Questa riga è già finita nel':'Esta línea ya está en el',
+'rapporto all\'Unione':'informe a la Unión',
+'di':'de',
+': non si tocca più.':': ya no se toca.',
+'Riga chiusa a chiave: è già finita nel rapporto all\'Unione':'Línea cerrada con llave: ya está en el informe a la Unión',
+'Prima va chiuso il rapporto di':'Primero hay que cerrar el informe de',
+'Il mese è finito e all\'Unione non è ancora partito niente: con questa data l\'entrata non si registra. Metti una data fino al':'El mes ha terminado y a la Unión todavía no ha salido nada: con esta fecha el ingreso no se registra. Pon una fecha hasta el',
+'— le entrate di':'— los ingresos de',
+'si possono ancora scrivere — oppure vai in':'todavía se pueden escribir — o ve a',
+'e invia il rapporto.':'y envía el informe.',
+'Questo controllo si spegne in':'Este control se apaga en',
+'Con questa data le casse che versano all\'Unione sono chiuse.':'Con esta fecha los fondos que entregan a la Unión están cerrados.',
+'è già partito e l\'Unione quei numeri li ha già messi nei suoi conti. Puoi lavorare liberamente sulle':'ya ha salido y la Unión ya ha puesto esas cifras en sus cuentas. Puedes trabajar libremente en los',
+'casse che restano al campo':'fondos que quedan en el campo',
+'; sulle altre, se davvero devi correggere, prima annulla l\'invio di quel mese in':'; en los demás, si de verdad tienes que corregir, anula primero el envío de ese mes en',
+'mesi precedenti mai chiusi':'meses anteriores nunca cerrados',
+'Questo rapporto versa soltanto la quota di':'Este informe entrega solo la cuota de',
+'scalati da':'descontados de',
+'scalato da':'descontado de',
+'IL RAPPORTO DI':'EL INFORME DE',
+'È A ZERO':'ESTÁ A CERO',
+'Stai per inviare il rapporto di':'Estás a punto de enviar el informe de',
+'per':'por',
+'. Se hai trattenuto qualcosa, se un versamento è parziale o se c\'è qualcosa da spiegare, scrivilo adesso: la nota finisce sul rapporto in PDF che ricevono loro.':'. Si has retenido algo, si una entrega es parcial o si hay algo que explicar, escríbelo ahora: la nota va al informe en PDF que reciben ellos.',
+'Al momento':'Por ahora',
+'non c\'è nessuna nota':'no hay ninguna nota',
+'. Se non serve, prosegui pure.':'. Si no hace falta, sigue adelante.',
+'Scegli se aggiungere una nota':'Elige si añadir una nota',
+'Confermi la banca da cui esce il denaro e la data':'Confirmas el banco del que sale el dinero y la fecha',
+'Il rapporto in PDF,':'El informe en PDF,',
+'nella lingua del programma':'en el idioma del programa',
+', viene creato e allegato':', se crea y se adjunta',
+'Il rapporto si chiude a chiave: non potrà più essere inviato':'El informe se cierra con llave: ya no podrá enviarse',
+'Dopo la conferma questo rapporto':'Tras la confirmación este informe',
+'non potrà più essere inviato':'ya no podrá enviarse',
+'⚠️ Nessuna nota · Procedi':'⚠️ Sin nota · Continuar',
+'✍️ Vuoi scrivere una nota all\'Unione?':'✍️ ¿Quieres escribir una nota a la Unión?',
+'✍️ Nota mandata all\'Unione:':'✍️ Nota enviada a la Unión:',
+'Stai per registrare il versamento all\'Unione di':'Estás a punto de registrar la entrega a la Unión de',
+'Le quote qui sotto tornano a zero e l\'importo viene scalato dalla banca.':'Las cuotas de abajo vuelven a cero y el importe se descuenta del banco.',
+'Stai per chiudere':'Estás a punto de cerrar',
+'con un rapporto':'con un informe',
+'a zero':'a cero',
+'questo mese non c\'è niente da versare. Non viene scalato niente da nessun deposito, ma l\'Unione riceve il foglio del mese con tutte le casse.':'este mes no hay nada que entregar. No se descuenta nada de ningún depósito, pero la Unión recibe la hoja del mes con todos los fondos.',
+'Scala l\'importo dal deposito':'Descontar el importe del depósito',
+'Non scalare da nessun deposito':'No descontar de ningún depósito',
+'Documenti che verranno creati e inviati':'Documentos que se crearán y enviarán',
+'Il foglio dell\'Unione, nella lingua del programma, con gli importi nella moneta scelta':'La hoja de la Unión, en el idioma del programa, con los importes en la moneda elegida',
+'Gli stessi numeri in Excel, con le righe per le firme':'Las mismas cifras en Excel, con líneas para las firmas',
+'Mail già pronta per':'Correo listo para',
+'l\'Unione':'la Unión',
+'Con l\'allegato dentro, oggetto e testo nella lingua del programma':'Con el adjunto dentro, asunto y texto en el idioma del programa',
+'copia a':'copia a',
+'Rimandare all\'Unione il rapporto di':'¿Reenviar a la Unión el informe de',
+'Somme trattenute, versamenti parziali, qualcosa da spiegare…':'Importes retenidos, entregas parciales, algo que explicar…',
+'Rapporto già inviato: la nota di questo mese è stata mandata ed è conservata qui sotto.':'Informe ya enviado: la nota de este mes se ha mandado y se conserva aquí abajo.',
+'Adesso è in sospeso il rapporto di':'Ahora está pendiente el informe de',
+'Adesso non c\'è nessun rapporto in sospeso.':'Ahora no hay ningún informe pendiente.',
+'su':'de',
+'Superato di':'Superado en',
+'all\'anno':'al año',
+'circa':'unos',
+'al mese':'al mes',
+'e':'y',
+'in tre anni':'en tres años',
+'Nel periodo scelto il limite è in proporzione ai giorni: un trimestre vale un quarto dell\'anno. Si conta la':'En el periodo elegido el límite es proporcional a los días: un trimestre vale un cuarto del año. Se cuenta la',
+'voce':'partida',
+'«Varie» del rapporto — le spese piccole messe insieme in una riga sola — e non la':'«Varios» del informe — los gastos pequeños juntados en una sola línea — y no el',
+'cassa':'fondo',
+'Varie: una spesa fatta da quella cassa, se ha la sua descrizione, sul rapporto ha la sua riga e qui non entra.':'Varios: un gasto hecho desde ese fondo, si tiene su descripción, en el informe tiene su línea y aquí no entra.',
+'Nuova ricevuta in entrata':'Nuevo recibo de ingreso',
+'Nuova ricevuta in uscita':'Nuevo recibo de gasto',
+'Elimina riga':'Eliminar línea',
+'— Deposito —':'— Depósito —',
+'Nome e cognome o ditta':'Nombre y apellidos o empresa',
+'Indirizzo, riferimento…':'Dirección, referencia…',
+'Note aggiuntive che compaiono sulla ricevuta':'Notas adicionales que aparecen en el recibo',
+'Scrivi o scegli un nome e cognome per intero':'Escribe o elige un nombre completo',
+'Nessun numero di telefono registrato':'Ningún número de teléfono registrado',
+'Cambiando il nome verranno aggiornate anche tutte le ricevute già registrate a questo nominativo.':'Al cambiar el nombre se actualizarán también todos los recibos ya registrados a este nombre.',
+'Ripartizione per cassa':'Reparto por fondo',
+'Elenco dei nomi':'Lista de nombres',
+'📄 Elenco in PDF':'📄 Lista en PDF',
+'Salva come CSV':'Guardar como CSV',
+'📷 Nessuna foto.':'📷 Ninguna foto.',
+'Scatta o scegli una foto qui sotto: comparirà grande in cima alla scheda.':'Haz o elige una foto aquí abajo: aparecerá grande en lo alto de la ficha.',
+'Le foto vengono rimpicciolite da sole a 1200 pixel: restano nitide ma occupano poco spazio.':'Las fotos se reducen solas a 1200 píxeles: siguen nítidas pero ocupan poco espacio.',
+'Scrivi quantità e prezzo unitario e il totale lo fa il programma. Se preferisci puoi anche scrivere il totale a mano.':'Escribe cantidad y precio unitario y el total lo hace el programa. Si prefieres, también puedes escribir el total a mano.',
+'Data della rottamazione':'Fecha de baja',
+'Importa i beni':'Importar bienes',
+'Importa i movimenti':'Importar movimientos',
+'Inserisci i beni':'Añadir los bienes',
+'Da un altro programma, senza riscrivere niente':'Desde otro programa, sin volver a escribir nada',
+'Da un PDF o da un elenco scritto: non li riscrivi a mano':'Desde un PDF o una lista escrita: no los vuelves a escribir a mano',
+'Oppure incolla qui l\'elenco':'O pega aquí la lista',
+'Oppure incolla qui le righe':'O pega aquí las líneas',
+'📄 Scegli il file esportato':'📄 Elige el archivo exportado',
+'📄 Scegli un PDF o un testo':'📄 Elige un PDF o un texto',
+'🔍 Leggi il testo qui sotto':'🔍 Lee el texto de abajo',
+'🔍 Rileggi':'🔍 Releer',
+'Salva la ricevuta in PDF, nel foglio giusto':'Guarda el recibo en PDF, en la hoja correcta',
+'Firma con il dito o con la matita, come su un foglio':'Firma con el dedo o con el lápiz, como en una hoja',
+'Nessuna firma registrata: sulla ricevuta resta solo la riga con il nome del tesoriere. Tocca':'Ninguna firma registrada: en el recibo queda solo la línea con el nombre del tesorero. Toca',
+'— su iPad e iPhone si firma direttamente sullo schermo.':'— en iPad y iPhone se firma directamente en la pantalla.',
+'Firma dentro il riquadro. Se non ti piace tocca':'Firma dentro del recuadro. Si no te gusta, toca',
+'e rifalla. La firma resta registrata e da quel momento compare su tutte le ricevute.':'y hazla de nuevo. La firma queda registrada y desde ese momento aparece en todos los recibos.',
+'La contabilità del campo è su questo dispositivo. Il codice serve a non farla aprire a chi non deve.':'La contabilidad del campo está en este dispositivo. El código sirve para que no la abra quien no debe.',
+'⌘ Maiusc R':'⌘ Mayús R',
+'Cerca dappertutto':'Buscar en todo',
+'Ricevute, persone, casse, depositi, beni e guida — tutto insieme':'Recibos, personas, fondos, depósitos, bienes y guía — todo junto',
+'Nome, numero di ricevuta, importo, parola nella descrizione…':'Nombre, número de recibo, importe, palabra de la descripción…',
+'Scrivi per esempio: fare una ricevuta, backup, rapporto all\'Unione, importare un rapporto…':'Escribe por ejemplo: hacer un recibo, copia, informe a la Unión, importar un informe…',
+'Scrivi quello che ti ricordi: il':'Escribe lo que recuerdes: el',
+'nome':'nombre',
+'di chi ha versato, il':'de quien ha entregado, el',
+'numero':'número',
+'della ricevuta, un':'del recibo, un',
+'importo':'importe',
+'(anche solo «120»), una':'(aunque sea solo «120»), una',
+'parola':'palabra',
+'della descrizione, il nome di una':'de la descripción, el nombre de un',
+'o di un':'o de un',
+'bene':'bien',
+'. Cerco dappertutto insieme.':'. Busco en todo a la vez.',
+'Della foto resta':'De la foto queda',
+'solo il foglio':'solo la hoja',
+': il programma lo raddrizza, gli riporta la carta al bianco e lo mette in PDF. Più pagine finiscono in':': el programa la endereza, devuelve el papel al blanco y la pone en PDF. Varias páginas acaban en',
+'un PDF solo':'un solo PDF',
+'. Viene un allegato pulito da leggere e molto più leggero della fotografia.':'. Sale un adjunto limpio de leer y mucho más ligero que la fotografía.',
+'Nel foglio finiscono nome, telefono,':'En la hoja van nombre, teléfono,',
+', quante ricevute ha e il totale. Ogni categoria ha il suo titolo e i nominativi sono in ordine alfabetico. Le categorie che non spunti non compaiono per niente.':', cuántos recibos tiene y el total. Cada categoría tiene su título y los nombres van en orden alfabético. Las categorías que no marques no aparecen.',
+'La spunta':'La marca',
+'o':'o',
+'serve a tenere in ordine la rubrica.':'sirve para tener en orden la agenda.',
+'è la data da cui comincia a dover il contributo: chi entra a giugno deve giugno, non gennaio. Se la lasci vuota vale tutto l\'anno.':'es la fecha desde la que empieza a deber la contribución: quien entra en junio debe junio, no enero. Si la dejas vacía vale todo el año.',
+'Prendi l\'elenco che hai già — un PDF, un foglio Excel salvato in testo, o anche solo delle righe scritte — e il programma le legge una per una.':'Coge la lista que ya tienes — un PDF, una hoja de Excel guardada como texto, o incluso solo unas líneas escritas — y el programa las lee una por una.',
+'Prima di inserire niente ti fa vedere che cosa ha capito':'Antes de añadir nada te enseña lo que ha entendido',
+', riga per riga: quello che non va lo togli con la spunta e lo scrivi a mano dopo.':', línea por línea: lo que no sirve lo quitas con la marca y lo escribes a mano después.',
+'Come si fa.':'Cómo se hace.',
+'Dal programma che usi adesso esporta i movimenti in':'Desde el programa que usas ahora exporta los movimientos en',
+'(in FileMaker:':'(en FileMaker:',
+'File → Esporta record → CSV':'Archivo → Exportar registros → CSV',
+'; in Excel o Numbers:':'; en Excel o Numbers:',
+'). Poi apri quel file qui sotto, oppure incolla direttamente le righe. Va bene anche una tabella markdown.':'). Luego abre ese archivo aquí abajo, o pega directamente las líneas. También vale una tabla markdown.',
+'Prima di scrivere qualsiasi cosa':'Antes de escribir nada',
+'ti faccio vedere che cosa ho capito, colonna per colonna, con i totali.':'te enseño lo que he entendido, columna por columna, con los totales.',
+'Una riga per ogni bene, per esempio: 200 sedie da sala 40,00 € Pianoforte verticale; Arredi; 12/05/2018; 1; 2.500,00 | Descrizione | Categoria | Data | Q.tà | Prezzo | Va bene anche una tabella markdown, con le barrette.':'Una línea por cada bien, por ejemplo:\n200 sillas de sala 40,00 €\nPiano vertical; Mobiliario; 12/05/2018; 1; 2.500,00\n| Descripción | Categoría | Fecha | Cant. | Precio |\nTambién vale una tabla markdown, con las barras.',
+'La moneta scelta viene scritta':'La moneda elegida se escribe',
+'dappertutto':'en todas partes',
+': ricevute, rapporti, diapositive, Excel e schermate.':': recibos, informes, diapositivas, Excel y pantallas.',
+'Gli importi non si convertono':'Los importes no se convierten',
+'— un 100 registrato resta 100, cambia solo la moneta con cui è scritto. I numeri si continuano a scrivere all\'italiana (':'— un 100 registrado sigue siendo 100, cambia solo la moneda con la que está escrito. Los números se siguen escribiendo a la italiana (',
+') in tutte le monete.':') en todas las monedas.',
+'Tutto il programma è tradotto':'Todo el programa está traducido',
+': menu, pulsanti, messaggi, rapporti, ricevute e guida. Le immagini della guida mostrano il programma in italiano.':': menús, botones, mensajes, informes, recibos y guía. Las imágenes de la guía muestran el programa en italiano.',
+'Movimento di Riforma':'Movimiento de Reforma',
+'Stato adesso:':'Estado ahora:',
+'collegato':'conectado',
+'senza rete':'sin red',
+'aperto dal file':'abierto desde el archivo',
+'aperto da un indirizzo web':'abierto desde una dirección web',
+'guardiano attivo':'guardián activo',
+'nessun guardiano':'ningún guardián',
+'aperto dall\'icona':'abierto desde el icono',
+'liberi su':'libres de',
+'non dichiarato dal browser':'no declarado por el navegador',
+'Lo spazio del dispositivo sta finendo':'El espacio del dispositivo se está acabando',
+'⚠️ Senza internet questa icona non si apre.':'⚠️ Sin internet este icono no se abre.',
+'Accanto al programma manca':'Junto al programa falta',
+'📶 Come si aggiusta':'📶 Cómo se arregla',
+'Il programma lavora e salva benissimo anche offline — i dati sono qui dentro — ma':'El programa trabaja y guarda perfectamente también sin conexión — los datos están aquí dentro — pero',
+'parte da un indirizzo web':'arranca desde una dirección web',
+', e per aprirlo senza rete accanto al programma deve esserci un file che si chiama':', y para abrirlo sin red junto al programa tiene que haber un archivo que se llama',
+'. Adesso non c\'è.':'. Ahora no está.',
+'✅ sw.js c\'è, a quell\'indirizzo.':'✅ sw.js está, en esa dirección.',
+'Se il guardiano non risulta ancora attivo, chiudi e riapri il programma una volta con la rete accesa.':'Si el guardián todavía no aparece activo, cierra y vuelve a abrir el programa una vez con la red encendida.',
+'Il programma in sé non scarica niente da internet — logo, icone, guida e figure stanno tutti dentro questo file — ma':'El programa en sí no descarga nada de internet — logo, iconos, guía y figuras están todos dentro de este archivo — pero',
+', e quell\'indirizzo senza rete non risponde. È per questo che uscendo e rientrando dall\'icona ti chiede di collegarti.':', y esa dirección sin red no responde. Por eso, al salir y volver a entrar desde el icono, te pide que te conectes.',
+'Il programma adesso lo apri da qui:':'Ahora el programa lo abres desde aquí:',
+'e sw.js deve finire esattamente qui:':'y sw.js tiene que ir exactamente aquí:',
+'Aggiungi alla schermata Home':'Añadir a pantalla de inicio',
+': il sistema potrebbe cancellare i dati di questo programma se il dispositivo va a corto di spazio, e finché non è protetto tiene anche l\'archivio più stretto. Su iPad e iPhone la protezione arriva quando aggiungi il programma alla':': el sistema podría borrar los datos de este programa si el dispositivo se queda sin espacio, y mientras no esté protegido mantiene también el archivo más estrecho. En iPad y iPhone la protección llega cuando añades el programa a la',
+'spostarlo':'moverlo',
+'peso':'peso',
+'). In fondo':'). Al final'
+},
+pt:{
+'Saldo del Campo':'Saldo do campo',
+'Banca + Contanti':'Banco + Numerário',
+'Banca':'Banco',
+'Contanti':'Numerário',
+'🏠 Home':'🏠 Início',
+'❓ Guida':'❓ Guia',
+'🏛️ Registro beni':'🏛️ Bens',
+'Backup':'Cópia',
+'Condividi':'Partilhar',
+'Fornitore':'Fornecedor',
+'Media':'Média',
+'Ultima':'Última',
+'Da oggi':'A partir de hoje',
+'Ricevuta':'Recibo',
+'Dettaglio':'Detalhe',
+'Importante:':'Importante:',
+'Offerta Missionaria':'Oferta missionária',
+'Letteratura':'Literatura',
+'Scuola del Sabato':'Escola Sabatina',
+'Assistenza Sociale':'Assistência social',
+'Altre Offerte':'Outras ofertas',
+'1° Sabato':'Primeiro sábado',
+'Missione Straniera':'Missão estrangeira',
+'Settimana di Preghiera':'Semana de Oração',
+'Utenze':'Serviços',
+'Viaggi':'Viagens',
+'Varie':'Diversos',
+'Arredi':'Mobiliário',
+'Attrezzatura':'Equipamento',
+'Attrezzature':'Equipamentos',
+'Impianti':'Instalações',
+'Informatica':'Informática',
+'Libri e letteratura':'Livros e literatura',
+'Strumenti':'Instrumentos',
+'— senza categoria —':'— sem categoria —',
+'➕ Nuova categoria…':'➕ Nova categoria…',
+'Dollaro americano':'Dólar americano',
+'Leu romeno':'Leu romeno',
+'Real brasiliano':'Real brasileiro',
+'Sterlina inglese':'Libra esterlina',
+'Peso argentino':'Peso argentino',
+'Dollaro canadese':'Dólar canadiano',
+'gennaio':'janeiro',
+'febbraio':'fevereiro',
+'marzo':'março',
+'aprile':'abril',
+'maggio':'maio',
+'giugno':'junho',
+'luglio':'julho',
+'agosto':'agosto',
+'settembre':'setembro',
+'ottobre':'outubro',
+'novembre':'novembro',
+'dicembre':'dezembro',
+'Gennaio':'Janeiro',
+'Febbraio':'Fevereiro',
+'Marzo':'Março',
+'Aprile':'Abril',
+'Maggio':'Maio',
+'Giugno':'Junho',
+'Luglio':'Julho',
+'Agosto':'Agosto',
+'Settembre':'Setembro',
+'Ottobre':'Outubro',
+'Novembre':'Novembro',
+'Dicembre':'Dezembro',
+'Usato in':'Usado em',
+'di ricevuta':'de recibo',
+'Non ancora usato':'Ainda não usado',
+'blocco del rapporto all\'Unione':'bloco do relatório à União',
+'all\'Unione':'para a União',
+'da versare':'a entregar',
+'resta tutta al campo':'fica toda no campo',
+'descrizioni nel rapporto':'descrições no relatório',
+'usata in':'usada em',
+'non ancora usata':'ainda não usada',
+'saldo':'saldo',
+'rapporto inviato':'relatório enviado',
+'rapporti inviati':'relatórios enviados',
+'allegato':'anexo',
+'allegati':'anexos',
+'archiviato il':'arquivado a',
+'Nessun telefono':'Sem telefone',
+'Tutto lo storico':'Todo o histórico',
+'Dal':'De',
+'al':'a',
+'Copia rimessa':'Cópia reposta',
+'del rapporto':'do relatório',
+'Date scelte a mano':'Datas escolhidas à mão',
+'Quota Unione':'Quota da União',
+'Totale versato':'Total entregue',
+'Importo versato':'Valor entregue',
+'Versato':'Entregue',
+'Data del versamento':'Data da entrega',
+'Rapporto chiuso.':'Relatório fechado.',
+'Il rapporto di':'O relatório de',
+'non è ancora stato inviato all\'Unione':'ainda não foi enviado à União',
+'Modifica ricevuta':'Editar recibo',
+'Questa riga è già finita nel':'Esta linha já está no',
+'rapporto all\'Unione':'relatório à União',
+'di':'de',
+': non si tocca più.':': já não se mexe.',
+'Riga chiusa a chiave: è già finita nel rapporto all\'Unione':'Linha fechada à chave: já está no relatório à União',
+'Prima va chiuso il rapporto di':'Primeiro tem de ser fechado o relatório de',
+'Il mese è finito e all\'Unione non è ancora partito niente: con questa data l\'entrata non si registra. Metti una data fino al':'O mês acabou e para a União ainda não partiu nada: com esta data a entrada não se regista. Põe uma data até',
+'— le entrate di':'— as entradas de',
+'si possono ancora scrivere — oppure vai in':'ainda se podem escrever — ou vai a',
+'e invia il rapporto.':'e envia o relatório.',
+'Questo controllo si spegne in':'Este controlo desliga-se em',
+'Con questa data le casse che versano all\'Unione sono chiuse.':'Com esta data os fundos que entregam à União estão fechados.',
+'è già partito e l\'Unione quei numeri li ha già messi nei suoi conti. Puoi lavorare liberamente sulle':'já partiu e a União já pôs esses números nas suas contas. Podes trabalhar livremente nos',
+'casse che restano al campo':'fundos que ficam no campo',
+'; sulle altre, se davvero devi correggere, prima annulla l\'invio di quel mese in':'; nos outros, se tiveres mesmo de corrigir, anula primeiro o envio desse mês em',
+'mesi precedenti mai chiusi':'meses anteriores nunca fechados',
+'Questo rapporto versa soltanto la quota di':'Este relatório entrega só a quota de',
+'scalati da':'descontados de',
+'scalato da':'descontado de',
+'IL RAPPORTO DI':'O RELATÓRIO DE',
+'È A ZERO':'ESTÁ A ZERO',
+'Stai per inviare il rapporto di':'Estás prestes a enviar o relatório de',
+'per':'por',
+'. Se hai trattenuto qualcosa, se un versamento è parziale o se c\'è qualcosa da spiegare, scrivilo adesso: la nota finisce sul rapporto in PDF che ricevono loro.':'. Se retiveste alguma coisa, se uma entrega é parcial ou se há algo a explicar, escreve-o agora: a nota vai para o relatório em PDF que eles recebem.',
+'Al momento':'Neste momento',
+'non c\'è nessuna nota':'não há nenhuma nota',
+'. Se non serve, prosegui pure.':'. Se não for preciso, continua.',
+'Scegli se aggiungere una nota':'Escolhe se acrescentas uma nota',
+'Confermi la banca da cui esce il denaro e la data':'Confirmas o banco de onde sai o dinheiro e a data',
+'Il rapporto in PDF,':'O relatório em PDF,',
+'nella lingua del programma':'na língua do programa',
+', viene creato e allegato':', é criado e anexado',
+'Il rapporto si chiude a chiave: non potrà più essere inviato':'O relatório fecha-se à chave: já não poderá ser enviado',
+'Dopo la conferma questo rapporto':'Depois da confirmação este relatório',
+'non potrà più essere inviato':'já não poderá ser enviado',
+'⚠️ Nessuna nota · Procedi':'⚠️ Sem nota · Continuar',
+'✍️ Vuoi scrivere una nota all\'Unione?':'✍️ Queres escrever uma nota à União?',
+'✍️ Nota mandata all\'Unione:':'✍️ Nota enviada à União:',
+'Stai per registrare il versamento all\'Unione di':'Estás prestes a registar a entrega à União de',
+'Le quote qui sotto tornano a zero e l\'importo viene scalato dalla banca.':'As quotas abaixo voltam a zero e o valor é descontado do banco.',
+'Stai per chiudere':'Estás prestes a fechar',
+'con un rapporto':'com um relatório',
+'a zero':'a zero',
+'questo mese non c\'è niente da versare. Non viene scalato niente da nessun deposito, ma l\'Unione riceve il foglio del mese con tutte le casse.':'este mês não há nada a entregar. Não se desconta nada de nenhum depósito, mas a União recebe a folha do mês com todos os fundos.',
+'Scala l\'importo dal deposito':'Descontar o valor do depósito',
+'Non scalare da nessun deposito':'Não descontar de nenhum depósito',
+'Documenti che verranno creati e inviati':'Documentos que serão criados e enviados',
+'Il foglio dell\'Unione, nella lingua del programma, con gli importi nella moneta scelta':'A folha da União, na língua do programa, com os valores na moeda escolhida',
+'Gli stessi numeri in Excel, con le righe per le firme':'Os mesmos números em Excel, com linhas para as assinaturas',
+'Mail già pronta per':'E-mail pronto para',
+'l\'Unione':'a União',
+'Con l\'allegato dentro, oggetto e testo nella lingua del programma':'Com o anexo incluído, assunto e texto na língua do programa',
+'copia a':'cópia para',
+'Rimandare all\'Unione il rapporto di':'Reenviar à União o relatório de',
+'Somme trattenute, versamenti parziali, qualcosa da spiegare…':'Valores retidos, entregas parciais, algo a explicar…',
+'Rapporto già inviato: la nota di questo mese è stata mandata ed è conservata qui sotto.':'Relatório já enviado: a nota deste mês foi enviada e está guardada aqui em baixo.',
+'Adesso è in sospeso il rapporto di':'Agora está pendente o relatório de',
+'Adesso non c\'è nessun rapporto in sospeso.':'Agora não há nenhum relatório pendente.',
+'su':'de',
+'Superato di':'Ultrapassado em',
+'all\'anno':'por ano',
+'circa':'cerca de',
+'al mese':'por mês',
+'e':'e',
+'in tre anni':'em três anos',
+'Nel periodo scelto il limite è in proporzione ai giorni: un trimestre vale un quarto dell\'anno. Si conta la':'No período escolhido o limite é proporcional aos dias: um trimestre vale um quarto do ano. Conta-se a',
+'voce':'rubrica',
+'«Varie» del rapporto — le spese piccole messe insieme in una riga sola — e non la':'«Diversos» do relatório — as despesas pequenas juntas numa só linha — e não o',
+'cassa':'fundo',
+'Varie: una spesa fatta da quella cassa, se ha la sua descrizione, sul rapporto ha la sua riga e qui non entra.':'Diversos: uma despesa feita a partir desse fundo, se tiver a sua descrição, no relatório tem a sua linha e aqui não entra.',
+'Nuova ricevuta in entrata':'Novo recibo de entrada',
+'Nuova ricevuta in uscita':'Novo recibo de saída',
+'Elimina riga':'Eliminar linha',
+'— Deposito —':'— Depósito —',
+'Nome e cognome o ditta':'Nome completo ou empresa',
+'Indirizzo, riferimento…':'Morada, referência…',
+'Note aggiuntive che compaiono sulla ricevuta':'Notas adicionais que aparecem no recibo',
+'Scrivi o scegli un nome e cognome per intero':'Escreve ou escolhe um nome completo',
+'Nessun numero di telefono registrato':'Nenhum número de telefone registado',
+'Cambiando il nome verranno aggiornate anche tutte le ricevute già registrate a questo nominativo.':'Ao mudar o nome serão atualizados também todos os recibos já registados com este nome.',
+'Ripartizione per cassa':'Repartição por fundo',
+'Elenco dei nomi':'Lista de nomes',
+'📄 Elenco in PDF':'📄 Lista em PDF',
+'Salva come CSV':'Guardar como CSV',
+'📷 Nessuna foto.':'📷 Nenhuma fotografia.',
+'Scatta o scegli una foto qui sotto: comparirà grande in cima alla scheda.':'Tira ou escolhe uma fotografia aqui em baixo: vai aparecer grande no topo da ficha.',
+'Le foto vengono rimpicciolite da sole a 1200 pixel: restano nitide ma occupano poco spazio.':'As fotografias são reduzidas sozinhas a 1200 píxeis: ficam nítidas mas ocupam pouco espaço.',
+'Scrivi quantità e prezzo unitario e il totale lo fa il programma. Se preferisci puoi anche scrivere il totale a mano.':'Escreve a quantidade e o preço unitário e o total é o programa que o faz. Se preferires, podes também escrever o total à mão.',
+'Data della rottamazione':'Data do abate',
+'Importa i beni':'Importar bens',
+'Importa i movimenti':'Importar movimentos',
+'Inserisci i beni':'Inserir os bens',
+'Da un altro programma, senza riscrivere niente':'A partir de outro programa, sem reescrever nada',
+'Da un PDF o da un elenco scritto: non li riscrivi a mano':'A partir de um PDF ou de uma lista escrita: não os reescreves à mão',
+'Oppure incolla qui l\'elenco':'Ou cola aqui a lista',
+'Oppure incolla qui le righe':'Ou cola aqui as linhas',
+'📄 Scegli il file esportato':'📄 Escolhe o ficheiro exportado',
+'📄 Scegli un PDF o un testo':'📄 Escolhe um PDF ou um texto',
+'🔍 Leggi il testo qui sotto':'🔍 Lê o texto abaixo',
+'🔍 Rileggi':'🔍 Reler',
+'Salva la ricevuta in PDF, nel foglio giusto':'Guarda o recibo em PDF, na folha certa',
+'Firma con il dito o con la matita, come su un foglio':'Assina com o dedo ou com o lápis, como numa folha',
+'Nessuna firma registrata: sulla ricevuta resta solo la riga con il nome del tesoriere. Tocca':'Nenhuma assinatura registada: no recibo fica só a linha com o nome do tesoureiro. Toca em',
+'— su iPad e iPhone si firma direttamente sullo schermo.':'— no iPad e no iPhone assina-se diretamente no ecrã.',
+'Firma dentro il riquadro. Se non ti piace tocca':'Assina dentro do quadro. Se não gostares, toca em',
+'e rifalla. La firma resta registrata e da quel momento compare su tutte le ricevute.':'e volta a fazê-la. A assinatura fica registada e a partir desse momento aparece em todos os recibos.',
+'La contabilità del campo è su questo dispositivo. Il codice serve a non farla aprire a chi non deve.':'A contabilidade do campo está neste dispositivo. O código serve para não a deixar abrir a quem não deve.',
+'⌘ Maiusc R':'⌘ Shift R',
+'Cerca dappertutto':'Procurar em tudo',
+'Ricevute, persone, casse, depositi, beni e guida — tutto insieme':'Recibos, pessoas, fundos, depósitos, bens e guia — tudo junto',
+'Nome, numero di ricevuta, importo, parola nella descrizione…':'Nome, número de recibo, valor, palavra na descrição…',
+'Scrivi per esempio: fare una ricevuta, backup, rapporto all\'Unione, importare un rapporto…':'Escreve por exemplo: fazer um recibo, cópia, relatório à União, importar um relatório…',
+'Scrivi quello che ti ricordi: il':'Escreve o que te lembras: o',
+'nome':'nome',
+'di chi ha versato, il':'de quem entregou, o',
+'numero':'número',
+'della ricevuta, un':'do recibo, um',
+'importo':'valor',
+'(anche solo «120»), una':'(mesmo só «120»), uma',
+'parola':'palavra',
+'della descrizione, il nome di una':'da descrição, o nome de um',
+'o di un':'ou de um',
+'bene':'bem',
+'. Cerco dappertutto insieme.':'. Procuro em tudo ao mesmo tempo.',
+'Della foto resta':'Da fotografia fica',
+'solo il foglio':'só a folha',
+': il programma lo raddrizza, gli riporta la carta al bianco e lo mette in PDF. Più pagine finiscono in':': o programa endireita-a, devolve o papel ao branco e põe-na em PDF. Várias páginas ficam em',
+'un PDF solo':'um só PDF',
+'. Viene un allegato pulito da leggere e molto più leggero della fotografia.':'. Sai um anexo limpo de ler e muito mais leve do que a fotografia.',
+'Nel foglio finiscono nome, telefono,':'Na folha ficam o nome, o telefone,',
+', quante ricevute ha e il totale. Ogni categoria ha il suo titolo e i nominativi sono in ordine alfabetico. Le categorie che non spunti non compaiono per niente.':', quantos recibos tem e o total. Cada categoria tem o seu título e os nomes estão por ordem alfabética. As categorias que não assinalares não aparecem de todo.',
+'La spunta':'A marca',
+'o':'ou',
+'serve a tenere in ordine la rubrica.':'serve para manter a lista em ordem.',
+'è la data da cui comincia a dover il contributo: chi entra a giugno deve giugno, non gennaio. Se la lasci vuota vale tutto l\'anno.':'é a data a partir da qual começa a dever a contribuição: quem entra em junho deve junho, não janeiro. Se a deixares vazia vale o ano todo.',
+'Prendi l\'elenco che hai già — un PDF, un foglio Excel salvato in testo, o anche solo delle righe scritte — e il programma le legge una per una.':'Pega na lista que já tens — um PDF, uma folha Excel guardada como texto, ou até só algumas linhas escritas — e o programa lê-as uma a uma.',
+'Prima di inserire niente ti fa vedere che cosa ha capito':'Antes de inserir seja o que for mostra-te o que percebeu',
+', riga per riga: quello che non va lo togli con la spunta e lo scrivi a mano dopo.':', linha a linha: o que não estiver bem tiras com a marca e escreves à mão depois.',
+'Come si fa.':'Como se faz.',
+'Dal programma che usi adesso esporta i movimenti in':'No programa que usas agora exporta os movimentos em',
+'(in FileMaker:':'(no FileMaker:',
+'File → Esporta record → CSV':'Ficheiro → Exportar registos → CSV',
+'; in Excel o Numbers:':'; no Excel ou Numbers:',
+'). Poi apri quel file qui sotto, oppure incolla direttamente le righe. Va bene anche una tabella markdown.':'). Depois abre esse ficheiro aqui em baixo, ou cola diretamente as linhas. Também serve uma tabela markdown.',
+'Prima di scrivere qualsiasi cosa':'Antes de escrever o que quer que seja',
+'ti faccio vedere che cosa ho capito, colonna per colonna, con i totali.':'mostro-te o que percebi, coluna a coluna, com os totais.',
+'Una riga per ogni bene, per esempio: 200 sedie da sala 40,00 € Pianoforte verticale; Arredi; 12/05/2018; 1; 2.500,00 | Descrizione | Categoria | Data | Q.tà | Prezzo | Va bene anche una tabella markdown, con le barrette.':'Uma linha por cada bem, por exemplo:\n200 cadeiras de sala 40,00 €\nPiano vertical; Mobiliário; 12/05/2018; 1; 2.500,00\n| Descrição | Categoria | Data | Qtd. | Preço |\nTambém serve uma tabela markdown, com as barras.',
+'La moneta scelta viene scritta':'A moeda escolhida escreve-se',
+'dappertutto':'em todo o lado',
+': ricevute, rapporti, diapositive, Excel e schermate.':': recibos, relatórios, diapositivos, Excel e ecrãs.',
+'Gli importi non si convertono':'Os valores não se convertem',
+'— un 100 registrato resta 100, cambia solo la moneta con cui è scritto. I numeri si continuano a scrivere all\'italiana (':'— um 100 registado continua 100, muda só a moeda com que está escrito. Os números continuam a escrever-se à italiana (',
+') in tutte le monete.':') em todas as moedas.',
+'Tutto il programma è tradotto':'Todo o programa está traduzido',
+': menu, pulsanti, messaggi, rapporti, ricevute e guida. Le immagini della guida mostrano il programma in italiano.':': menus, botões, mensagens, relatórios, recibos e guia. As imagens do guia mostram o programa em italiano.',
+'Movimento di Riforma':'Movimento de Reforma',
+'Stato adesso:':'Estado agora:',
+'collegato':'ligado',
+'senza rete':'sem rede',
+'aperto dal file':'aberto a partir do ficheiro',
+'aperto da un indirizzo web':'aberto a partir de um endereço web',
+'guardiano attivo':'guardião ativo',
+'nessun guardiano':'nenhum guardião',
+'aperto dall\'icona':'aberto a partir do ícone',
+'liberi su':'livres de',
+'non dichiarato dal browser':'não indicado pelo navegador',
+'Lo spazio del dispositivo sta finendo':'O espaço do dispositivo está a acabar',
+'⚠️ Senza internet questa icona non si apre.':'⚠️ Sem internet este ícone não abre.',
+'Accanto al programma manca':'Ao lado do programa falta',
+'📶 Come si aggiusta':'📶 Como se resolve',
+'Il programma lavora e salva benissimo anche offline — i dati sono qui dentro — ma':'O programa trabalha e guarda perfeitamente mesmo offline — os dados estão aqui dentro — mas',
+'parte da un indirizzo web':'arranca a partir de um endereço web',
+', e per aprirlo senza rete accanto al programma deve esserci un file che si chiama':', e para o abrir sem rede ao lado do programa tem de haver um ficheiro chamado',
+'. Adesso non c\'è.':'. Agora não existe.',
+'✅ sw.js c\'è, a quell\'indirizzo.':'✅ sw.js existe, nesse endereço.',
+'Se il guardiano non risulta ancora attivo, chiudi e riapri il programma una volta con la rete accesa.':'Se o guardião ainda não aparecer ativo, fecha e volta a abrir o programa uma vez com a rede ligada.',
+'Il programma in sé non scarica niente da internet — logo, icone, guida e figure stanno tutti dentro questo file — ma':'O programa em si não descarrega nada da internet — logótipo, ícones, guia e figuras estão todos dentro deste ficheiro — mas',
+', e quell\'indirizzo senza rete non risponde. È per questo che uscendo e rientrando dall\'icona ti chiede di collegarti.':', e esse endereço sem rede não responde. É por isso que, ao sair e voltar a entrar pelo ícone, te pede para te ligares.',
+'Il programma adesso lo apri da qui:':'Agora abres o programa a partir daqui:',
+'e sw.js deve finire esattamente qui:':'e o sw.js tem de ficar exatamente aqui:',
+'Aggiungi alla schermata Home':'Adicionar ao ecrã principal',
+': il sistema potrebbe cancellare i dati di questo programma se il dispositivo va a corto di spazio, e finché non è protetto tiene anche l\'archivio più stretto. Su iPad e iPhone la protezione arriva quando aggiungi il programma alla':': o sistema pode apagar os dados deste programa se o dispositivo ficar sem espaço, e enquanto não estiver protegido mantém também o arquivo mais apertado. No iPad e no iPhone a proteção chega quando acrescentas o programa ao',
+'spostarlo':'movê-lo',
+'peso':'peso',
+'). In fondo':'). No fim'
+}
+};
+Object.keys(TRAD20).forEach(l=>{
+  const d=TRAD[l]||(TRAD[l]={});
+  Object.entries(TRAD20[l]).forEach(([k,v])=>{ if(d[k]===undefined) d[k]=v });
+});
+/* le poche voci già esistenti da correggere: spagnolo e portoghese davanti a
+   «Movimento di Riforma» volevano «del» / «do», non «de» / «da» */
+const TRAD21={
+ ro:{'Data':'Data','📊 Rapporti':'📊 Rapoarte'},
+ en:{'📊 Rapporti':'📊 Reports'},
+ es:{'Tipo':'Tipo','📊 Rapporti':'📊 Informes'},
+ pt:{'Data':'Data','Tipo':'Tipo','📊 Rapporti':'📊 Relatórios'}
+};
+Object.keys(TRAD21).forEach(l=>{
+  const d=TRAD[l]||(TRAD[l]={});
+  Object.entries(TRAD21[l]).forEach(([k,v])=>{ if(d[k]===undefined) d[k]=v });
+});
+const OVERRIDE20={
+es:{'Compare in alto accanto al nome, sulle ricevute, sui rapporti e sull\'icona del programma. Se non ne carichi uno resta quello del':'Aparece arriba junto al nombre, en los recibos, en los informes y en el icono del programa. Si no subes ninguno se queda el del','Stai usando il logo del':'Estás usando el logotipo del'},
+pt:{'Compare in alto accanto al nome, sulle ricevute, sui rapporti e sull\'icona del programma. Se non ne carichi uno resta quello del':'Aparece em cima ao lado do nome, nos recibos, nos relatórios e no ícone do programa. Se não carregares nenhum fica o do','Stai usando il logo del':'Estás a usar o logótipo do'}
+};
+Object.keys(OVERRIDE20).forEach(l=>{ Object.assign(TRAD[l]||(TRAD[l]={}),OVERRIDE20[l]) });
+
 /* ==========================================================
    LE SEI LINGUE
    L'italiano è la lingua madre: nel codice le scritte restano scritte in
@@ -17814,6 +19022,15 @@ function t(s){
   const dn=NORM(l); if(dn[piatto]!==undefined) return dn[piatto];
   const q=tPezzi(k,dn); if(q!==null) return q;
   return s;
+}
+/* lo stesso traduttore, con un nome che nessuna variabile locale oscura */
+const TR=s=>t(s);
+/* scrive un attributo già tradotto e fa dimenticare al traduttore il valore
+   italiano di prima, così al prossimo giro non lo rimette */
+function attrT(el,a,v){
+  if(!el) return;
+  el.setAttribute(a,v);
+  try{ const m=ORIGA.get(el); if(m) delete m[a] }catch(err){}
 }
 /* indice appiattito di ogni dizionario, costruito una volta sola */
 const NORMC={};
@@ -18557,7 +19774,7 @@ function preparaIcona(){
   /* la fotografia di partenza per il pulsante «🚫 Non salvare» */
   segnaInizioSessione();
   if($('stVer')) $('stVer').textContent=VERSIONE;
-  if($('stVerData')) $('stVerData').textContent=VERSIONE_DATA;
+  scriviDataVersione();
   document.documentElement.lang=lingua();
   accendiTraduzione();
   buildNav(); renderChrome(); paintSimboli(); checkStorage();
