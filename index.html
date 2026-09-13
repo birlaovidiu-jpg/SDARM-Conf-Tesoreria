@@ -1171,6 +1171,9 @@ tr.voided td{opacity:.5;text-decoration:line-through}
     <div class="toolbar">
       <button class="btn green sm" onclick="openReceipt('Entrata')">➕ Entrata</button>
       <button class="btn red sm" onclick="openReceipt('Uscita')">➖ Uscita</button>
+      <button class="btn light sm" onclick="ricevuteListaStampa()">🖨️ Stampa</button>
+      <button class="btn light sm" onclick="ricevuteListaPdf()">📄 PDF</button>
+      <button class="btn share sm" onclick="ricevuteListaCondividi()">📲 Condividi</button>
     </div>
   </div>
 
@@ -2157,13 +2160,18 @@ const nomeGruppo=g=>(GRUPPI.find(x=>x.id===g)||GRUPPI[3]).it;
    riquadri, le colonne e le larghezze restano quelle già misurate.
    ══════════════════════════════════════════════════════════ */
 const VALUTE={
-  EUR:{ban:'\ud83c\uddea\ud83c\uddfa',sim:'\u20ac',  nome:'Euro',              en:'euro'},
-  USD:{ban:'\ud83c\uddfa\ud83c\uddf8',sim:'$',   nome:'Dollaro americano', en:'US dollars'},
+  /* la bandiera dell'Irlanda accanto a quella europea: l'Irlanda usa l'euro,
+     non ha una moneta sua — stessa cosa per l'Ecuador con il dollaro */
+  EUR:{ban:'\ud83c\uddea\ud83c\uddfa\ud83c\uddee\ud83c\uddea',sim:'\u20ac',  nome:'Euro',              en:'euro'},
+  USD:{ban:'\ud83c\uddfa\ud83c\uddf8\ud83c\uddea\ud83c\udde8',sim:'$',   nome:'Dollaro americano', en:'US dollars'},
+  /* AR$ e CA$, non un $ semplice: con l'americano già nell'elenco un altro
+     $ nudo sarebbe indistinguibile sul foglio stampato */
+  ARS:{ban:'\ud83c\udde6\ud83c\uddf7',sim:'AR$', nome:'Peso argentino',    en:'Argentine pesos'},
+  CAD:{ban:'\ud83c\udde8\ud83c\udde6',sim:'CA$', nome:'Dollaro canadese',  en:'Canadian dollars'},
+  CLP:{ban:'\ud83c\udde8\ud83c\uddf1',sim:'CL$', nome:'Peso cileno',       en:'Chilean pesos'},
   RON:{ban:'\ud83c\uddf7\ud83c\uddf4',sim:'lei', nome:'Leu romeno',        en:'Romanian lei'},
   BRL:{ban:'\ud83c\udde7\ud83c\uddf7',sim:'R$',  nome:'Real brasiliano',   en:'Brazilian reais'},
-  GBP:{ban:'\ud83c\uddec\ud83c\udde7',sim:'\u00a3',  nome:'Sterlina inglese',  en:'pounds sterling'},
-  ARS:{ban:'\ud83c\udde6\ud83c\uddf7',sim:'$',   nome:'Peso argentino',    en:'Argentine pesos'},
-  CAD:{ban:'\ud83c\udde8\ud83c\udde6',sim:'$',   nome:'Dollaro canadese',  en:'Canadian dollars'}
+  GBP:{ban:'\ud83c\uddec\ud83c\udde7',sim:'\u00a3',  nome:'Sterlina inglese',  en:'pounds sterling'}
 };
 /* si legge dalle impostazioni · se lì c'è scritto qualcosa che non conosco,
    o se il programma non è ancora partito, si torna sempre all'euro */
@@ -2224,7 +2232,7 @@ const DEFAULTS={
 /* Il numero di versione serve a una cosa sola ma importante: capire in due
    secondi se il file aperto è l'ultimo o è quello vecchio rimasto nella
    memoria del browser. Va cambiato a ogni modifica del programma. */
-const VERSIONE='1.1', VERSIONE_DATA='11 settembre 2026';
+const VERSIONE='1.2', VERSIONE_DATA='13 settembre 2026';
 let state=load(), draft=null, viewId=null, pendingSend=null;
 /* aperta mentre una ricevuta si sta registrando: impedisce il doppio tocco */
 let salvataggioInCorso=false;
@@ -3436,6 +3444,115 @@ function renderReceipts(){
         filtro?euro(r.lines.filter(keep).reduce((s,l)=>s+(+l.amount||0),0)):euro(r.total)}</td>
       <td><button class="btn light sm" onclick="viewReceipt(${r.id})">Apri</button></td></tr>`;
   }).join('') : '<tr><td colspan="8" class="empty">Nessuna ricevuta trovata con questi filtri.</td></tr>';
+}
+
+/* ══════════════════════════════════════════════════════════
+   STAMPA / PDF / CONDIVIDI DELL'ELENCO RICEVUTE, COSÌ COM'È FILTRATO
+   Stessa selezione di elencoRic — filtri compresi. Il foglio riusa il motore
+   dei rapporti (newPage/pgBand/pgTable), lo stesso della Chiesa e del
+   rapporto all'Unione. Ported dal programma delle chiese, dove la stessa
+   cosa è nata lo stesso giorno. Il foglio resta in italiano come tutti gli
+   altri elenchi stampati (Registro beni, estratti persona): solo il
+   rapporto all'Unione segue la lingua del programma. */
+function ricevuteFiltroAttuale(){
+  const rows=elencoRic.map(id=>state.receipts.find(r=>r.id===id)).filter(Boolean);
+  const fund=$('fFund').value,box=$('fBox').value;
+  const keep=l=>(!fund||l.fund===fund)&&(!box||l.box===box);
+  let tIn=0,tOut=0;
+  rows.filter(r=>r.status!=='void').forEach(r=>{
+    const v=r.lines.filter(keep).reduce((s,l)=>s+(+l.amount||0),0);
+    if(r.type==='Entrata') tIn+=v; else tOut+=v;
+  });
+  const filtro=fund||box||'';
+  return {rows,tIn,tOut,filtro,keep,from:$('fFrom').value,to:$('fTo').value};
+}
+function ricevutePagine(){
+  const {rows,tIn,tOut,filtro,keep,from,to}=ricevuteFiltroAttuale();
+  const s=state.settings, pages=[];
+  const periodo=from&&to?`Dal ${fmtDate(from)} al ${fmtDate(to)}`
+    :from?`Da ${fmtDate(from)}`:to?`Fino al ${fmtDate(to)}`:'Tutto il periodo';
+  const sottotitolo=filtro?`${periodo} · ${filtro}`:periodo;
+  let p=newPage();
+  const band=()=>pgBand(p,'Elenco ricevute',s.church,sottotitolo,'#7d9fc4','#2c5a86');
+  band(); pages.push(p);
+  pgCards(p,[
+    {t:'Ricevute',v:String(rows.length),bg:'#eef1f7',color:'#41546b'},
+    {t:'Entrate',v:euro(tIn),bg:'#e7f4ec',color:'#0a5c37'},
+    {t:'Uscite',v:euro(tOut),bg:'#fceceb',color:'#8f1f2a'},
+    {t:'Saldo',v:euro(tIn-tOut),bg:'#e9f1fb',color:'#2c5a86'}
+  ]);
+  pgH(p,'Ricevute','#2c5a86');
+
+  /* una riga per ogni RIGA di ricevuta che passa il filtro — non una per
+     ricevuta: così la cassa che si vede è sempre una sola, quella cercata,
+     e non trascina dentro le altre casse della stessa ricevuta. */
+  const righe=[];
+  rows.forEach(r=>r.lines.filter(keep).forEach(l=>righe.push({r,l})));
+
+  const rh=Math.round(8.9*PK), pad=Math.round(3*PK);
+  const cassaW=Math.round(38*PK), importoW=Math.round(30*PK);
+  const fine=()=>p.H-Math.round(40*PK);
+  const salta=h=>{ if(p.y+h>fine()){ p=newPage(); band(); pages.push(p) } };
+  const testa=()=>{
+    const x=p.x, w=p.W-2*p.M, cassaX=p.W-p.M-importoW-cassaW;
+    x.fillStyle='#eceff3'; x.fillRect(p.M,p.y,w,rh);
+    x.fillStyle='#41546b'; x.font=FT(700,9);
+    x.fillText('RICEVUTA',p.M+pad,p.y+rh*.66);
+    x.fillText('CASSA',cassaX+pad,p.y+rh*.66);
+    x.textAlign='right'; x.fillText('IMPORTO',p.W-p.M-pad,p.y+rh*.66); x.textAlign='left';
+    p.y+=rh;
+  };
+  salta(rh); testa();
+  righe.forEach(({r,l},i)=>{
+    salta(rh);
+    const x=p.x, w=p.W-2*p.M, cassaX=p.W-p.M-importoW-cassaW, voided=r.status==='void';
+    if(i%2){ x.fillStyle='#fafbfc'; x.fillRect(p.M,p.y,w,rh) }
+    x.fillStyle=voided?'#9aa4b1':'#22303f'; x.font=FT(600,10);
+    clip(x,`${r.number}  ·  ${fmtDate(r.date)}  ·  ${r.name||'—'}`,p.M+pad,p.y+rh*.68,cassaX-p.M-pad*2);
+    x.fillStyle=voided?'#9aa4b1':'#584ab5'; x.font=FT(400,9.5);
+    clip(x,l.fund,cassaX+pad,p.y+rh*.68,cassaW-pad*2);
+    x.fillStyle=voided?'#9aa4b1':(r.type==='Entrata'?'#0a5c37':'#8f1f2a'); x.font=FT(700,10.5); x.textAlign='right';
+    x.fillText(euro(l.amount),p.W-p.M-pad,p.y+rh*.68); x.textAlign='left';
+    x.strokeStyle='#dde3e9'; x.lineWidth=1;
+    x.beginPath(); x.moveTo(p.M,p.y+rh); x.lineTo(p.W-p.M,p.y+rh); x.stroke();
+    p.y+=rh;
+  });
+  if(!righe.length){
+    salta(rh);
+    p.x.fillStyle='#8a96a3'; p.x.font=FT(400,10);
+    p.x.fillText('Nessuna ricevuta trovata con questi filtri',p.M+pad,p.y+rh*.68);
+    p.y+=rh;
+  }
+  p.y+=Math.round(9*PK);
+  salta(Math.round(14*PK));
+  pgTable(p,[{tot:1,l:'SALDO',r:euro(tIn-tOut),color:'#2c5a86'}]);
+  pgFoot(pages[pages.length-1],`Il tesoriere${s.treasurer?' — '+s.treasurer:''}`,`${s.church}\nStampato il ${fmtDate(today())}`);
+  return pages;
+}
+function ricevuteListaPdfBlob(){
+  return pdfFromPages(ricevutePagine().map(q=>({canvas:q.c,wmm:210,hmm:297})),1);
+}
+function ricevuteListaPdf(){
+  try{ saveFile(new File([ricevuteListaPdfBlob()],`Ricevute_${state.settings.church.replace(/\s+/g,'_')}_${today()}.pdf`,{type:'application/pdf'})) }
+  catch(e){ console.error(e); toast('Non riesco a creare il PDF') }
+}
+function ricevuteListaStampa(){
+  let pagine;
+  try{ pagine=ricevutePagine() }
+  catch(e){ console.error(e); toast('Non riesco a preparare la stampa'); return }
+  printImages(pagine.map(q=>q.c.toDataURL('image/jpeg',1)),210,297,'Elenco ricevute');
+}
+async function ricevuteListaCondividi(){
+  let file;
+  try{ file=new File([ricevuteListaPdfBlob()],`Ricevute_${state.settings.church.replace(/\s+/g,'_')}_${today()}.pdf`,{type:'application/pdf'}) }
+  catch(e){ console.error(e); toast('Non riesco a creare il PDF'); return }
+  const {rows,tIn,tOut}=ricevuteFiltroAttuale();
+  const text=`${state.settings.church}\nElenco ricevute\n${rows.length} ricevute · Saldo: ${euro(tIn-tOut)}`;
+  if(navigator.canShare?.({files:[file]})){
+    try{ await navigator.share({files:[file],title:'Elenco ricevute',text}); return }
+    catch(e){ if(e.name==='AbortError') return }
+  }
+  if(await saveFile(file)) toast('PDF salvato');
 }
 
 /* ---------- MODALE RICEVUTA ---------- */
@@ -4839,6 +4956,21 @@ function printImage(url,wmm,hmm,nome){
   im.onerror=()=>{ h.innerHTML=''; titoloRimetti(); toast('Non riesco a preparare la stampa') };
   h.appendChild(im);
   im.src=url;
+}
+/* come printImage, ma per più pagine insieme in un solo lavoro di stampa:
+   serve all'elenco ricevute filtrato, che può stamparsi su più fogli */
+function printImages(urls,wmm,hmm,nome){
+  $('pageStyle').textContent=`@page{size:${wmm}mm ${hmm}mm;margin:0}`;
+  const h=$('printHost'); h.innerHTML='';
+  let pronte=0;
+  const via=()=>{ titoloStampa(nome); window.print(); setTimeout(()=>h.innerHTML='',800) };
+  urls.forEach(u=>{
+    const im=new Image(); im.style.cssText='display:block';
+    im.onload=()=>{ if(++pronte===urls.length) via() };
+    im.onerror=()=>{ h.innerHTML=''; titoloRimetti(); toast('Non riesco a preparare la stampa') };
+    h.appendChild(im);
+    im.src=u;
+  });
 }
 function printNodes(html,size='A5 portrait',nome){
   $('pageStyle').textContent=`@page{size:${size};margin:0}`;
@@ -7796,8 +7928,17 @@ function tbl(map){
   return {rows:e,tot,html:e.map(([k,v])=>`<tr><td>${esc(k)}</td><td class="amt">${euro(v)}</td></tr>`).join('')
     ||`<tr><td>Nessun movimento</td><td class="amt">${euro(0)}</td></tr>`};
 }
+/* Come tbl(), ma per le mappe che hanno il NOME DI UNA CASSA come chiave —
+   «Decima», «Scuola del Sabato» — e quindi vanno tradotte. Le altre due
+   mappe che usano tbl() sono nomi di persone e descrizioni di spesa scritte
+   da lui: quelle non si toccano mai. */
+function tblCasse(map){
+  const tradotta={};
+  for(const k in map) tradotta[t(k)]=(tradotta[t(k)]||0)+map[k];
+  return tbl(tradotta);
+}
 function renderChurchPreview(){
-  const d=churchData(),a=tbl(d.casse),ch=tbl(d.chiese),c=tbl(d.locOut);
+  const d=churchData(),a=tblCasse(d.casse),ch=tbl(d.chiese),c=tbl(d.locOut);
   $('chPreview').innerHTML=`<div class="sumbar" style="margin:0">
     <div><span>Spedito all\'Unione</span><b style="color:var(--violet)">${euro(d.speditoTot)}</b></div>
     <div><span>Entrate del periodo</span><b style="color:var(--green)">${euro(a.tot)}</b></div>
@@ -8031,7 +8172,7 @@ function sTopBox(s,x0,y0,w,name,amount,c1,c2){
    ══════════════════════════════════════════════════════════ */
 function slideSet(){
   const d=churchData();
-  const a=tbl(d.casse), ch=tbl(d.chiese), c=tbl(d.locOut), sp=tbl(d.spedito);
+  const a=tblCasse(d.casse), ch=tbl(d.chiese), c=tbl(d.locOut), sp=tblCasse(d.spedito);
   const out=[];
 
   /* 1 · copertina */
@@ -8244,7 +8385,7 @@ async function shareChurch(){
   saveFile(file); toast('PDF scaricato');
 }
 function printChurch(){
-  const d=churchData(),a=tbl(d.spedito),b=tbl(d.casse),c=tbl(d.locOut);
+  const d=churchData(),a=tblCasse(d.spedito),b=tblCasse(d.casse),c=tbl(d.locOut);
   const sec=(t,x,col)=>`<h4 style="margin:5mm 0 2mm;color:${col}">${t}</h4>
     <table><tbody>${x.html}<tr class="tot"><td>Totale</td><td class="r">${euro(x.tot)}</td></tr></tbody></table>`;
   printNodes(`<div class="a5 in" style="width:210mm;min-height:290mm;height:auto">
@@ -18964,6 +19105,31 @@ Object.keys(TRAD20).forEach(l=>{
 });
 /* le poche voci già esistenti da correggere: spagnolo e portoghese davanti a
    «Movimento di Riforma» volevano «del» / «do», non «de» / «da» */
+/* le due lingue e il nome della moneta nuova (peso cileno), stessa dicitura
+   già scelta per SDARM Italia quando gli è stata aggiunta */
+const TRAD22={
+ ro:{'Peso cileno':'Peso chilian'},
+ en:{'Peso cileno':'Chilean peso'},
+ es:{'Peso cileno':'Peso chileno'},
+ pt:{'Peso cileno':'Peso chileno'}
+};
+Object.keys(TRAD22).forEach(l=>{
+  const d=TRAD[l]||(TRAD[l]={});
+  Object.entries(TRAD22[l]).forEach(([k,v])=>{ if(d[k]===undefined) d[k]=v });
+});
+/* le parole nude dei tasti sotto una ricevuta aperta (bt(), riga ~4585):
+   «Stampa» e «PDF» ci arrivano già maiuscole; qui sotto vengono tradotte
+   come parole a sé, non come pezzo di una frase più lunga */
+const TRAD23={
+ ro:{'Stampa':'Tipărire','PDF':'PDF','Riattiva':'Reactivează'},
+ en:{'Stampa':'Print','PDF':'PDF','Riattiva':'Reactivate'},
+ es:{'Stampa':'Imprimir','PDF':'PDF','Riattiva':'Reactivar'},
+ pt:{'Stampa':'Imprimir','PDF':'PDF','Riattiva':'Reativar'}
+};
+Object.keys(TRAD23).forEach(l=>{
+  const d=TRAD[l]||(TRAD[l]={});
+  Object.entries(TRAD23[l]).forEach(([k,v])=>{ if(d[k]===undefined) d[k]=v });
+});
 const TRAD21={
  ro:{'Data':'Data','📊 Rapporti':'📊 Rapoarte'},
  en:{'📊 Rapporti':'📊 Reports'},
@@ -19019,7 +19185,11 @@ function t(s){
   /* terzo: la stessa frase scritta su piu' righe, con i rientri del codice.
      Si confronta schiacciando spazi e a capo in uno spazio solo. */
   const piatto=nudo.replace(/\s+/g,' ');
-  const dn=NORM(l); if(dn[piatto]!==undefined) return dn[piatto];
+  /* qui dentro nudo ha ancora i suoi a capo e rientri originali: si
+     ricostruisce lo spazio prima e dopo esattamente come nel tentativo
+     precedente, se no una frase che finisce a fine riga appena prima di un
+     <b> perdeva lo spazio e si leggeva «...cea aMovimento di Riforma» */
+  const dn=NORM(l); if(dn[piatto]!==undefined) return k.replace(nudo,dn[piatto]);
   const q=tPezzi(k,dn); if(q!==null) return q;
   return s;
 }
